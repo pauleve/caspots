@@ -15,7 +15,7 @@ On Ubuntu, installation the gringo package should satisfy those dependencies.
 
 ## Installation
 
-	pip install https://github.com/pauleve/caspots.git
+	pip install https://github.com/pauleve/caspots/archive/master.zip
 
 This will install necessary dependencies, except the gringo python module and
 NuSMV.
