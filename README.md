@@ -63,5 +63,8 @@ The option --check-exacts invokes a model-checker (NuSMV) until it finds a BN
 and a trace with the estimated MSE: in such a case, the displayed MSE is the
 actual minimal MSE of the PKN with respect to the dataset.
 
-
-
+#### Authors
+- Max Ostrowski
+- Loïc Paulevé
+- Anne Siegel
+- Carito Guziolowski
