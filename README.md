@@ -26,7 +26,7 @@ A docker image is also available
 
 You can then create an alias to use `caspots` command:
 
-	alias caspots='docker run --volume "$PWD":/wd --workdir /wd pauleve/caspots'
+	alias caspots='docker run --rm --volume "$PWD":/wd --workdir /wd pauleve/caspots'
 
 
 ## Usage
