@@ -7,6 +7,9 @@ from pyzcasp import asp
 from caspo import core, learn
 from caspo.core import impl
 
+from caspots import asputils
+from caspots.model import *
+
 class TimeSeries2TermSet(asp.TermSetAdapter):
     component.adapts(core.IDataset, learn.IDiscretization)
     def __init__(self, dataset, discretization):
@@ -87,6 +90,9 @@ gsm = component.getGlobalSiteManager()
 gsm.registerAdapter(TimeSeries2TermSet)
 gsm.registerAdapter(CsvReader2Dataset, (core.ICsvReader,core.IGraph), core.IDataset)
 
+def parse_answer(line):
+    return asputils.re_answer.findall(line)
+
 def termset_of_sif(siffile):
     sif = component.getUtility(core.IFileReader)
     sif.read(siffile)
@@ -106,4 +112,68 @@ def termset_of_dataset(csvfile, graph, discretization="round", factor=100):
     #dataset = core.IDataset(reader)
     discretize = component.createObject(discretization, factor)
     return component.getMultiAdapter((dataset, discretize), asp.ITermSet)
+
+def domain_of_networks(networks, pkn, dataset):
+    out = ["1{%s}1." % ("; ".join(["model(%d)" % i for i in range(len(networks))]))]
+
+    nodefid = {}
+    edgeids = {}
+    hids = {}
+    for t in pkn:
+        p = t.pred
+        if p == "node":
+            nodefid[t.arg(0)] = t.arg(1)
+        elif p == "edge":
+            hid, node, sign = (t.arg(0), t.arg(1), t.arg(2))
+            k = (node, sign)
+            if k not in edgeids:
+                edgeids[k] = set()
+            edgeids[k].add(hid)
+        elif p == "hyper":
+            fid, eid, n = (t.arg(0), t.arg(1), t.arg(2))
+            k = (fid,n)
+            if k not in hids:
+                hids[k] = set()
+            hids[k].add(eid)
+
+    nodes = dataset.inhibitors.union(dataset.readout)
+
+    predicates = ["formula", "dnf", "clause"]
+
+    # {formula(V,I): node(V,I)}6, 6{dnf(I,J): hyper(I,J,N)}6, 7{clause(J,V,B): edge(J,V,B)}7
+
+    #convert and write each network to logic facts
+    for i, net in enumerate(networks):
+        ts = asp.ITermSet(net)
+        data = ts.to_str().replace(".\n", " ")
+        data = parse_answer(data)
+
+        bn = BNModel(0)
+        bn.feed_from_asp(data)
+        bn.default_false(nodes)
+
+        facts = []
+        for f in bn.formula.values():
+            fid = nodefid[f.var]
+            facts.append("formula(\"%s\",%d)" % (f.var, fid))
+            for dnf in f:
+                hid = None
+                n = len(dnf)
+                for (node, sign) in dnf:
+                    eids = edgeids[(node,sign)].copy()
+                    if hid is None:
+                        hid = eids
+                    else:
+                        hid.intersection_update(eids)
+                hid.intersection_update(hids[(fid,n)])
+                assert len(hid) == 1, hid
+                hid = hid.pop()
+                facts.append("dnf(%d,%d)" % (fid, hid))
+                for (node, sign) in dnf:
+                    facts.append("clause(%d,\"%s\",%d)" % (hid, node, sign))
+
+        for f in facts:
+            out.append("%s :- model(%d)." % (f,i))
+    return "\n".join(out) + "\n"
+
 

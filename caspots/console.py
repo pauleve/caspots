@@ -46,6 +46,24 @@ def read_dataset(args, graph):
         termset.to_file(dfile, pprint=True)
     return termset
 
+def read_networks(args):
+    reader = component.getUtility(core.ICsvReader)
+    reader.read(args.networks)
+    networks = list(ILogicalNetworkList(reader))[args.range_from:]
+    if args.range_length:
+        networks = networks[:args.range_length]
+    return networks
+
+def read_domain(args, pkn, dataset, outf):
+    if args.networks:
+        networks = read_networks(args)
+        out = domain_of_networks(networks, pkn, dataset)
+        with open(outf, "w") as fd:
+            fd.write(out)
+        return outf
+    else:
+        return None
+
 def do_pkn2lp(args):
     read_pkn(args)[0].to_file(args.output, pprint=True)
 
@@ -53,14 +71,28 @@ def do_midas2lp(args):
     _, graph = read_pkn(args)
     read_dataset(args, graph).to_file(args.output, pprint=True)
 
+def do_results2lp(args):
+    pkn, graph = read_pkn(args)
+    idataset = read_dataset(args, graph)
+    dataset = Dataset(dataset_name(args))
+    dataset.feed_from_asp(idataset.to_str())
+    networks = read_networks(args)
+    out = domain_of_networks(networks, pkn, dataset)
+    print(out)
+
 def do_mse(args):
     pkn, graph = read_pkn(args)
     idataset = read_dataset(args, graph)
     termset = pkn.union(idataset)
-    identifier = identify.ASPSolver(termset, args)
-
     dataset = Dataset(dataset_name(args))
     dataset.feed_from_asp(idataset.to_str())
+
+    fd, domainlp = tempfile.mkstemp(".lp")
+    os.close(fd)
+    domain = read_domain(args, pkn, dataset, domainlp)
+
+    identifier = identify.ASPSolver(termset, args, domain=domain)
+
 
     first = True
     exact = False
@@ -97,6 +129,7 @@ def do_mse(args):
             print("MSE_sample is exact")
         else:
             print("MSE_sample may be under-estimated (no True Positive found)")
+    os.unlink(domainlp)
 
 
 def do_identify(args):
@@ -246,6 +279,16 @@ def run():
     dataset_parser.add_argument("--factor", type=int, default=100,
                                     help="discretization factor (default: 100)")
 
+    networks_parser = ArgumentParser(add_help=False)
+    networks_parser.add_argument("--range-from", type=int, default=0,
+        help="Validate only networks from given row (starting at 0)")
+    networks_parser.add_argument("--range-length", type=int, default=0,
+        help="Number of networks to validate (0 means all)")
+
+    domain_parser = ArgumentParser(add_help=False,
+        parents=[networks_parser])
+    domain_parser.add_argument("--networks", help="Networks to as domain (.csv)")
+
     parser_pkn2lp = subparsers.add_parser("pkn2lp",
         help="Export PKN (sif format) to ASP (lp format)",
         parents=[pkn_parser])
@@ -258,10 +301,16 @@ def run():
     parser_midas2lp.add_argument("output", help="Output file (.lp format)")
     parser_midas2lp.set_defaults(func=do_midas2lp)
 
+    parser_results2lp = subparsers.add_parser("results2lp",
+        help="Export results to ASP (lp format)",
+        parents=[pkn_parser, dataset_parser, networks_parser])
+    parser_results2lp.add_argument("networks", help="Networks file (.csv format)")
+    parser_results2lp.set_defaults(func=do_results2lp)
+
     parser_mse = subparsers.add_parser("mse",
         help="Compute the best MSE",
         parents=[pkn_parser, dataset_parser, identify_parser,
-                    modelchecking_p])
+                    modelchecking_p, domain_parser])
     parser_mse.add_argument("--check-exact", action="store_true", default=False,
                             help="look for a true positive with the computed MSE")
     parser_mse.set_defaults(func=do_mse)

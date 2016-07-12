@@ -20,9 +20,7 @@ from caspots.config import *
 from caspots.model import *
 from caspots import asputils
 from caspots.utils import *
-
-def parse_answer(line):
-    return asputils.re_answer.findall(line)
+from caspots.input import *
 
 def crunch_data(answer, predicate, factor):
     factor = float(factor)
@@ -120,14 +118,17 @@ class ASPSample:
 
 
 class ASPSolver:
-    def __init__(self, termset, opts):
+    def __init__(self, termset, opts, domain=None):
         self.termset = termset
         self.data = termset.to_str()
         self.opts = opts
         self.debug = opts.debug
-        self.domain = [aspf("guessBN.lp")]
-        if opts.fully_controllable:
-            self.domain.append(aspf("guessBN-controllable.lp"))
+        if domain is None:
+            self.domain = [aspf("guessBN.lp")]
+            if opts.fully_controllable:
+                self.domain.append(aspf("guessBN-controllable.lp"))
+        else:
+            self.domain = [domain]
 
     def sample(self, first, *args):
         gringo_cmd = ["gringo"] + self.domain + [
