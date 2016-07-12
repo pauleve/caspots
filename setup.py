@@ -10,6 +10,7 @@ setup(name="caspots",
     install_requires = [
 #        "gringo",
         "caspo",
+        "pydot<=1.2",
     ],
     packages = find_packages(),
     include_package_data = True,
