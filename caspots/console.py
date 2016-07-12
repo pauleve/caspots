@@ -64,7 +64,7 @@ def do_mse(args):
 
     first = True
     exact = False
-    for sample in identifier:
+    for sample in identifier.solution_samples():
         (mse0, mse) = sample.mse()
         if first:
             print("MSE_discrete = %s" % mse0)
