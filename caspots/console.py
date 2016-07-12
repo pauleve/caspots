@@ -136,10 +136,15 @@ def do_identify(args):
     pkn, graph = read_pkn(args)
     idataset = read_dataset(args, graph)
     termset = pkn.union(idataset)
-    identifier = identify.ASPSolver(termset, args)
 
     dataset = Dataset(dataset_name(args))
     dataset.feed_from_asp(idataset.to_str())
+
+    fd, domainlp = tempfile.mkstemp(".lp")
+    os.close(fd)
+    domain = read_domain(args, pkn, dataset, domainlp)
+
+    identifier = identify.ASPSolver(termset, args, domain=domain)
 
     sif = component.getUtility(core.IFileReader)
     sif.read(args.pkn)
@@ -193,6 +198,7 @@ def do_identify(args):
 
     writer = core.ICsvWriter(networks)
     writer.write(args.output)
+    os.unlink(domainlp)
 
 
 def do_validate(args):
@@ -318,7 +324,7 @@ def run():
     parser_identify = subparsers.add_parser("identify",
         help="Identify all the best Boolean networks",
         parents=[pkn_parser, dataset_parser, identify_parser,
-                    modelchecking_p])
+                    modelchecking_p, domain_parser])
     parser_identify.add_argument("--true-positives", default=False, action="store_true",
         help="filter solutions to keep only true positives (exact identification)")
     parser_identify.add_argument("--limit", default=0, type=int,
