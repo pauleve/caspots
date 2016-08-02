@@ -141,7 +141,8 @@ class ASPSolver:
         if first:
             gringo_cmd += [aspf("minimizeWeightOnly.lp")]
         gringo_cmd += list(args)
-        clasp_cmd = ["clasp", "--conf=trendy", "--stats", "--opt-strat=usc",
+        clasp_cmd = ["clingo", "--mode=clasp",
+                        "--conf=trendy", "--stats", "--opt-strat=usc",
                         "--quiet=1"]
         if self.debug:
             dbg("# %s" % (" ".join(gringo_cmd + ["|"] + clasp_cmd)))
