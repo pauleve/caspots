@@ -264,7 +264,7 @@ def run():
                                     default=False,
                                     help="enumerate over traces")
     identify_parser.add_argument("--fully-controllable", action="store_true",
-                                    help="only consider BNs where all nodes have a stimulus in their ancestors")
+                                    help="only consider BNs where all nodes have a stimulus in their ancestors (default)")
     identify_parser.add_argument("--no-fully-controllable", action="store_false", dest="fully_controllable",
                                     help="do not only consider BNs where all nodes have a stimulus in their ancestors")
     identify_parser.set_defaults(fully_controllable=True)
