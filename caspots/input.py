@@ -1,10 +1,20 @@
 
+from functools import partial
+
+import numpy as np
+import pandas as pd
 
 import caspo.learn
 import caspo.core
+from caspo.core.setup import Setup
+from caspo.core.literal import Literal
+from caspo.core.clamping import Clamping, ClampingList
+
 
 from caspots import asputils
+from .asputils import *
 from .model import *
+
 
 """
 class TimeSeries2TermSet(asp.TermSetAdapter):
@@ -24,16 +34,16 @@ class TimeSeries2TermSet(asp.TermSetAdapter):
 class Csv2Dataset(caspo.core.Dataset):
     def __init__(self, midas, graph):
         df = pd.read_csv(midas)
-        self.graph = graph
-        self.times = np.unique(df.filter(regex='^DA').values.flatten())
         df.drop(df.columns[0], axis=1, inplace=True)
-        super(caspo.Dataset, self).__init__(df.reset_index(drop=True))
+        super(caspo.core.Dataset, self).__init__(df.reset_index(drop=True))
 
         stimuli = [c[3:] for c in [c for c in self.columns if self.is_stimulus(c)]]
         inhibitors = [c[3:-1] for c in [c for c in self.columns if self.is_inhibitor(c)]]
         readouts = [c[3:] for c in [c for c in self.columns if self.is_readout(c)]]
 
         self.setup = Setup(stimuli, inhibitors, readouts)
+        self.graph = graph
+        self.times = np.unique(df.filter(regex='^DA').values.flatten())
 
     @property
     def clampings(self):
