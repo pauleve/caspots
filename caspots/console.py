@@ -1,4 +1,3 @@
-#!/usr/bin/env python2
 
 from __future__ import print_function
 
@@ -6,19 +5,18 @@ import os
 import sys
 import tempfile
 
-try:
-    import gringo
-except ImportError:
-    print("!!! gringo python module is not installed. Some features will fail.",
-            file=sys.stderr)
+import gringo
 
-from caspots.input import *
-from caspots.formats import *
-from caspots.utils import *
-from caspots.dataset import *
+import caspo.core
+
+from .input import *
+#from .formats import *
+from .utils import *
+from .asputils import *
+from .dataset import *
 from caspots import identify
 from caspots import modelchecking
-from caspots.model import *
+from .model import *
 
 def prepare_output_file(path):
     dbg("# writing to '%s'" % path)
@@ -29,12 +27,9 @@ def debug_file(args, name):
     return path
 
 def read_pkn(args):
-    termset, graph = termset_of_sif(args.pkn)
-    if args.debug:
-        dfile = debug_file(args,
-            "%s.lp"%os.path.basename(args.pkn).replace(".sif", ""))
-        termset.to_file(dfile, pprint=True)
-    return termset, graph
+    graph = caspo.core.Graph.read_sif(args.pkn)
+    hypergraph = caspo.core.HyperGraph.from_graph(graph)
+    return graph, hypergraph
 
 def dataset_name(args):
     return os.path.basename(args.dataset).replace(".csv", "")
@@ -43,7 +38,7 @@ def read_dataset(args, graph):
     termset = termset_of_dataset(args.dataset, graph, factor=args.factor)
     if args.debug:
         dfile = debug_file(args, "%s.lp"%dataset_name(args))
-        termset.to_file(dfile, pprint=True)
+        termset.to_file(dfile)
     return termset
 
 def read_networks(args):
@@ -54,10 +49,10 @@ def read_networks(args):
         networks = networks[:args.range_length]
     return networks
 
-def read_domain(args, pkn, dataset, outf):
+def read_domain(args, hypergraph, dataset, outf):
     if args.networks:
         networks = read_networks(args)
-        out = domain_of_networks(networks, pkn, dataset)
+        out = domain_of_networks(networks, hypergraph, dataset)
         with open(outf, "w") as fd:
             fd.write(out)
         return outf
@@ -65,14 +60,14 @@ def read_domain(args, pkn, dataset, outf):
         return None
 
 def do_pkn2lp(args):
-    read_pkn(args)[0].to_file(args.output, pprint=True)
+    funset(read_pkn(args)[1]).to_file(args.output)
 
 def do_midas2lp(args):
-    _, graph = read_pkn(args)
-    read_dataset(args, graph).to_file(args.output, pprint=True)
+    graph, _ = read_pkn(args)
+    read_dataset(args, graph).to_file(args.output)
 
 def do_results2lp(args):
-    pkn, graph = read_pkn(args)
+    pkn, hypergraph = read_pkn(args)
     idataset = read_dataset(args, graph)
     dataset = Dataset(dataset_name(args))
     dataset.feed_from_asp(idataset.to_str())
@@ -81,7 +76,7 @@ def do_results2lp(args):
     print(out)
 
 def do_mse(args):
-    pkn, graph = read_pkn(args)
+    graph, hypergraph = read_pkn(args)
     idataset = read_dataset(args, graph)
     termset = pkn.union(idataset)
     dataset = Dataset(dataset_name(args))
@@ -89,7 +84,7 @@ def do_mse(args):
 
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
-    domain = read_domain(args, pkn, dataset, domainlp)
+    domain = read_domain(args, hypergraph, dataset, domainlp)
 
     identifier = identify.ASPSolver(termset, args, domain=domain)
 
@@ -133,26 +128,19 @@ def do_mse(args):
 
 
 def do_identify(args):
-    pkn, graph = read_pkn(args)
-    idataset = read_dataset(args, graph)
-    termset = pkn.union(idataset)
+    graph, hypergraph = read_pkn(args)
+    asp_dataset = read_dataset(args, graph)
+    termset = funset(hypergraph, asp_dataset)
 
-    dataset = Dataset(dataset_name(args))
-    dataset.feed_from_asp(idataset.to_str())
+    dataset = Dataset(dataset_name(args), asp_dataset)
 
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
-    domain = read_domain(args, pkn, dataset, domainlp)
+    domain = read_domain(args, hypergraph, dataset, domainlp)
 
     identifier = identify.ASPSolver(termset, args, domain=domain)
 
-    sif = component.getUtility(core.IFileReader)
-    sif.read(args.pkn)
-    graph = core.IGraph(sif)
-    names = component.getUtility(core.ILogicalNames)
-    names.load(graph)
-
-    networks = core.LogicalNetworkSet()
+    networks = LogicalNetworkList.from_hypergraph(hypergraph)
 
     c = {
         "found": 0,
@@ -176,9 +164,9 @@ def do_identify(args):
 
     def on_model(model):
         c["found"] += 1
-        facts = map(str, model.atoms(gringo.Model.SHOWN))
         skip = False
         if args.true_positives:
+            facts = map(str, model.atoms(gringo.Model.SHOWN))
             if is_true_positive(c["found"], identify.parse_answer(", ".join(facts))):
                 c["tp"] += 1
             else:
@@ -186,9 +174,9 @@ def do_identify(args):
         show_stats()
         if skip:
             return
-        answer = asp.AnswerSet(facts)
-        network = core.ILogicalNetwork(asp.ITermSet(answer))
-        networks.add(network, update_names=False)
+        tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
+        network = core.LogicalNetwork.from_hypertuples(hypgraphe, tuples)
+        networks.append(network)
 
     identifier.solutions(on_model, limit=args.limit, force_weight=args.force_weight)
     print("%d solution(s) for the over-approximation" % c["found"])
@@ -196,8 +184,7 @@ def do_identify(args):
         print("%d/%d true positives [rate: %0.2f%%]" \
             % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
 
-    writer = core.ICsvWriter(networks)
-    writer.write(args.output)
+    networks.to_csv(args.output)
     os.unlink(domainlp)
 
 
@@ -346,5 +333,11 @@ def run():
     parser_validate.set_defaults(func=do_validate)
 
     args = parser.parse_args()
+    print("#### OPTIONS ######")
+    for k,v in args._get_kwargs():
+        if k in ["func"]:
+            continue
+        print("# %s = %s" % (k,v))
+    print("###################")
     args.func(args)
 

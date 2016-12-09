@@ -1,4 +1,4 @@
-FROM svidela/clingo
+FROM bioasp/caspo
 MAINTAINER Pauleve Loic <loic.pauleve@lri.fr>
 COPY . /src
 RUN pip install /src

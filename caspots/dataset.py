@@ -32,24 +32,22 @@ class Experiment:
         return buf
 
 class Dataset:
-    def __init__(self, name):
+    def __init__(self, name, fs):
         self.name = name
         self.stimulus = set()
         self.inhibitors = set()
         self.readout = set()
         self.experiments = {}
+        self.feed_from_asp(fs)
 
-    def feed_from_asp(self, content):
-        def key(e):
-            try:
-                return ["exp"].index(e[0])
-            except ValueError:
-                return 10
-        for (p, args) in sorted(re_clause.findall(content), key=key) :
-            try:
-                args = parse_args(args)
-            except ValueError:
-                continue
+    def feed_from_asp(self, fs):
+        def key(f):
+            if f.name() == "exp":
+                return 0
+            return 10
+        for f in sorted(fs, key=key):
+            p = f.name()
+            args = f.args()
             if p == "stimulus":
                 self.stimulus.add(args[0])
             elif p == "inhibitor":

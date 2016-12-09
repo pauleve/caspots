@@ -196,8 +196,6 @@ class ASPSolver:
     def solutions(self, on_model, on_model_weight=None, limit=0,
                     force_weight=None):
 
-        tsfile = self.termset.to_file()
-
         control = gringo.Control(["--conf=trendy", "--stats", "0", "--opt-strat=usc"])
 
         do_mincard = self.opts.family == "mincard" \
@@ -212,7 +210,7 @@ class ASPSolver:
         if do_mincard:
             control.load(aspf("minimizeSizeOnly.lp"))
         control.load(aspf("normalize.lp"))
-        control.load(tsfile)
+        control.add("base", [], self.data)
 
         control.ground([("base", [])])
 
