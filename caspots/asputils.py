@@ -27,5 +27,5 @@ class funset(set):
 
     def to_str(self):
         if len(self):
-            return ".\n".join(map(str, self))+".\n"
+            return ".\n".join(sorted(map(str, self)))+".\n"
         return ""

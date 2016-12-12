@@ -7,16 +7,14 @@ import tempfile
 
 import gringo
 
-import caspo.core
+from caspo.core import Graph, HyperGraph, LogicalNetwork, LogicalNetworkList
 
-from .input import *
-#from .formats import *
+from .networks import *
 from .utils import *
 from .asputils import *
 from .dataset import *
 from caspots import identify
 from caspots import modelchecking
-from .model import *
 
 def prepare_output_file(path):
     dbg("# writing to '%s'" % path)
@@ -27,26 +25,26 @@ def debug_file(args, name):
     return path
 
 def read_pkn(args):
-    graph = caspo.core.Graph.read_sif(args.pkn)
-    hypergraph = caspo.core.HyperGraph.from_graph(graph)
+    graph = Graph.read_sif(args.pkn)
+    hypergraph = HyperGraph.from_graph(graph)
     return graph, hypergraph
 
 def dataset_name(args):
     return os.path.basename(args.dataset).replace(".csv", "")
 
 def read_dataset(args, graph):
-    termset = termset_of_dataset(args.dataset, graph, factor=args.factor)
-    if args.debug:
-        dfile = debug_file(args, "%s.lp"%dataset_name(args))
-        termset.to_file(dfile)
-    return termset
+    ds = Dataset(dataset_name(args), dfactor=args.factor)
+    ds.load_from_midas(args.dataset, graph)
+    return ds
 
 def read_networks(args):
-    reader = component.getUtility(core.ICsvReader)
-    reader.read(args.networks)
-    networks = list(ILogicalNetworkList(reader))[args.range_from:]
-    if args.range_length:
-        networks = networks[:args.range_length]
+    networks = LogicalNetworkList.from_csv(args.networks)
+    if args.range_from:
+        end = len(networks)
+        if args.range_length:
+            end = args.range_from + args.range_length
+        indexes = range(args.range_from, end)
+        networks = networks[indexes]
     return networks
 
 def read_domain(args, hypergraph, dataset, outf):
@@ -64,23 +62,21 @@ def do_pkn2lp(args):
 
 def do_midas2lp(args):
     graph, _ = read_pkn(args)
-    read_dataset(args, graph).to_file(args.output)
+    dataset = read_dataset(args, graph)
+    funset(dataset).to_file(args.output)
 
 def do_results2lp(args):
-    pkn, hypergraph = read_pkn(args)
-    idataset = read_dataset(args, graph)
-    dataset = Dataset(dataset_name(args))
-    dataset.feed_from_asp(idataset.to_str())
+    graph, hypergraph = read_pkn(args)
+    dataset = read_dataset(args, graph)
     networks = read_networks(args)
-    out = domain_of_networks(networks, pkn, dataset)
+    out = domain_of_networks(networks, hypergraph, dataset)
     print(out)
 
 def do_mse(args):
     graph, hypergraph = read_pkn(args)
-    idataset = read_dataset(args, graph)
-    termset = pkn.union(idataset)
-    dataset = Dataset(dataset_name(args))
-    dataset.feed_from_asp(idataset.to_str())
+    dataset = read_dataset(args, graph)
+
+    termset = funset(hypergraph, dataset)
 
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
@@ -129,10 +125,8 @@ def do_mse(args):
 
 def do_identify(args):
     graph, hypergraph = read_pkn(args)
-    asp_dataset = read_dataset(args, graph)
-    termset = funset(hypergraph, asp_dataset)
-
-    dataset = Dataset(dataset_name(args), asp_dataset)
+    dataset = read_dataset(args, graph)
+    termset = funset(hypergraph, dataset)
 
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
@@ -153,29 +147,26 @@ def do_identify(args):
             output.write("%d solution(s)\r" % c["found"])
         output.flush()
 
-    def is_true_positive(bid, facts):
-        model = BNModel(bid)
-        model.feed_from_asp(facts)
+    def is_true_positive(bid, network):
         fd, smvfile = tempfile.mkstemp(".smv")
         os.close(fd)
-        exact = modelchecking.verify(dataset, model, smvfile, args.semantics)
+        exact = modelchecking.verify(dataset, network, smvfile, args.semantics)
         os.unlink(smvfile)
         return exact
 
     def on_model(model):
         c["found"] += 1
         skip = False
+        tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
+        network = LogicalNetwork.from_hypertuples(hypergraph, tuples)
         if args.true_positives:
-            facts = map(str, model.atoms(gringo.Model.SHOWN))
-            if is_true_positive(c["found"], identify.parse_answer(", ".join(facts))):
+            if is_true_positive(c["found"], network):
                 c["tp"] += 1
             else:
                 skip = True
         show_stats()
         if skip:
             return
-        tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
-        network = core.LogicalNetwork.from_hypertuples(hypgraphe, tuples)
         networks.append(network)
 
     identifier.solutions(on_model, limit=args.limit, force_weight=args.force_weight)
@@ -190,24 +181,13 @@ def do_identify(args):
 
 def do_validate(args):
     pkn, graph = read_pkn(args)
-    idataset = read_dataset(args, graph)
+    dataset = read_dataset(args, graph)
+    networks = read_networks(args)
 
-    dataset = Dataset(dataset_name(args))
-    dataset.feed_from_asp(idataset.to_str())
-
-    reader = component.getUtility(core.ICsvReader)
-    reader.read(args.networks)
-    networks = list(ILogicalNetworkList(reader))[args.range_from:]
-    if args.range_length:
-        networks = networks[:args.range_length]
-    nb = len(networks)
-
-    def is_true_positive(bid, terms):
-        model = BNModel(bid)
-        model.feed_from_asp(identify.parse_answer(terms.to_str()))
+    def is_true_positive(bid, network):
         fd, smvfile = tempfile.mkstemp(".smv")
         os.close(fd)
-        exact = modelchecking.verify(dataset, model, smvfile, args.semantics)
+        exact = modelchecking.verify(dataset, network, smvfile, args.semantics)
         if args.debug:
             dbg("# %s" % smvfile)
         else:
@@ -216,11 +196,12 @@ def do_validate(args):
 
     tp = 0
     c = 0
+    nb = len(networks)
     for network in networks:
         c += 1
         sys.stderr.write("%d/%d... " % (c,nb))
         sys.stderr.flush()
-        if is_true_positive(c, asp.ITermSet(network)):
+        if is_true_positive(c, network):
             tp += 1
         sys.stderr.write("%d/%d true positives\r" % (tp,c))
     res = "%d/%d true positives [rate: %0.2f%%]" % (tp, nb, (100.*tp)/nb)

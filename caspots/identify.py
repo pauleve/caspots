@@ -8,19 +8,11 @@ import sys
 import tempfile
 import time
 
-try:
-    import gringo
-except ImportError:
-    print("!!! gringo python module is not installed. Some features will fail.",
-            file=sys.stderr)
-
-from pyzcasp import asp
+import gringo
 
 from caspots.config import *
-from caspots.model import *
 from caspots import asputils
 from caspots.utils import *
-from caspots.input import *
 
 def crunch_data(answer, predicate, factor):
     factor = float(factor)
@@ -192,7 +184,6 @@ class ASPSolver:
 
         os.unlink(excludelp)
 
-    @asp.cleanrun
     def solutions(self, on_model, on_model_weight=None, limit=0,
                     force_weight=None):
 

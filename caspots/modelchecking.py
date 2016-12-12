@@ -2,23 +2,21 @@
 
 import subprocess
 
-from caspots.dataset import *
-from caspots.model import *
-
 U_GENERAL = "general"
 U_ASYNC = "asynchronous"
 
 MODES = [U_GENERAL, U_ASYNC]
 
-def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
+def make_smv(dataset, network, destfile, update=U_GENERAL):
 
-    constants = dataset.stimulus.difference(bnmodel.nodes)
+    varying_nodes = set([node for node, _ in network.formulas_iter()])
 
-    clampable = bnmodel.nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
+    constants = dataset.stimulus.difference(varying_nodes)
 
-    vs = set([f.var for f in bnmodel.formula.values()])
+    clampable = varying_nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
 
-    constants.update(bnmodel.nodes.difference(vs))
+    #vs = set([f.var for f in bnmodel.formula.values()])
+    #constants.update(bnmodel.nodes.difference(vs))
 
     smv = open(destfile, "w")
     smv.write("MODULE main\n")
@@ -26,7 +24,7 @@ def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
     smv.write("\tstart: boolean;\n")
     for n in constants:
         smv.write("\tn_%s: boolean;\n" % n)
-    for n in vs:
+    for n in varying_nodes:
         smv.write("\tn_%s: boolean;\n" % n)
         smv.write("\tu_%s: boolean;\n" % n)
         if n in clampable:
@@ -36,7 +34,7 @@ def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
     smv.write("next(start) := FALSE;\n")
     for n in constants:
         smv.write("next(n_%s) := n_%s;\n" % (n,n))
-    for n in vs:
+    for n in varying_nodes:
         smv.write("next(n_%s) := case " % n)
         if n not in dataset.readout:
             smv.write("start: {TRUE, FALSE}; ")
@@ -45,13 +43,28 @@ def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
             smv.write("next(C_%s) := C_%s;\n" % (n, n))
         #smv.write("next(u_%s) := {TRUE, FALSE};\n" % n)
     smv.write("\nDEFINE\n")
-    for f in bnmodel.formula.values():
-        n = f.var
+
+    def nusmv_of_literal((var, sign)):
+        return "%sn_%s" % ("!" if sign == -1 else "", var)
+
+    def nusmv_of_clause(clause):
+        expr = " & ".join(map(nusmv_of_literal, clause))
+        if len(clause) > 1:
+            return "(%s)" % expr
+        return expr
+
+    def nusmv_of_clauses(clauses):
+        if len(clauses) == 0:
+            return "FALSE"
+        return " | ".join(map(nusmv_of_clause, clauses))
+
+    for n, clauses in network.formulas_iter():
+        expr = nusmv_of_clauses(clauses)
         if n in clampable:
-            smv.write("F_%s := case C_%s=0: %s; " % (n, n, f.nusmv_expr()))
+            smv.write("F_%s := case C_%s=0: %s; " % (n, n, expr))
             smv.write("C_%s=1: TRUE; C_%s=-1: FALSE; esac;\n" % (n, n))
         else:
-            smv.write("%s\n" % str(f))
+            smv.write("F_%s := %s;\n" % (n, expr))
 
     for exp in dataset.experiments.values():
         setup = []
@@ -70,30 +83,30 @@ def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
         for t, values in exp.obs.items():
             state = []
             for n, v in values.items():
-                if n not in bnmodel.nodes and n not in dataset.stimulus:
+                if n not in varying_nodes and n not in dataset.stimulus:
                     continue
                 state.append("%sn_%s" % ("!" if not v else "", n))
             smv.write("E%d_T%d := %s;\n" % (exp.id, t, " & ".join(state)))
 
-    fpconds = ["n_%s = F_%s" % (n, n) for n in vs]
+    fpconds = ["n_%s = F_%s" % (n, n) for n in varying_nodes]
     smv.write("FIXEDPOINTS := %s;\n" % " & ".join(fpconds))
 
     smv.write("\nTRANS\n")
     smv.write("  next(start) != start")
-    for n in vs:
+    for n in varying_nodes:
         smv.write("\n| next(n_%s) != n_%s" % (n,n))
         smv.write("\n| next(u_%s) != u_%s" % (n,n))
     smv.write("\n| FIXEDPOINTS")
     smv.write(";\n")
 
     if update == U_ASYNC:
-        for n in vs:
-            cond = " & ".join(["!u_%s" % m for m in vs if m != n])
+        for n in varying_nodes:
+            cond = " & ".join(["!u_%s" % m for m in varying_nodes if m != n])
             smv.write("TRANS u_%s -> %s;\n" % (n, cond))
 
     smv.write("\nINIT\n")
     smv.write("(start")
-    for n in vs:
+    for n in varying_nodes:
         smv.write(" & !u_%s" % n)
     smv.write(");\n")
 
@@ -113,32 +126,9 @@ def make_smv(dataset, bnmodel, destfile, update=U_GENERAL):
     smv.close()
     return destfile
 
-def verify(dataset, bnmodel, destfile, *args, **kwargs):
-    smvfile = make_smv(dataset, bnmodel, destfile, *args, **kwargs)
+def verify(dataset, network, destfile, *args, **kwargs):
+    smvfile = make_smv(dataset, network, destfile, *args, **kwargs)
     output = subprocess.check_output(["NuSMV", "-dcx", smvfile])
     ret = output.strip().split()[-1].decode()
     return ret == "true"
-
-if __name__ == "__main__":
-    from argparse import ArgumentParser
-    import os
-    import tempfile
-    parser = ArgumentParser()
-    parser.add_argument("dataset")
-    parser.add_argument("bnmodels")
-    parser.add_argument("--asynchronous", action="store_true", default=False)
-    args = parser.parse_args()
-
-    update = U_ASYNC if args.asynchronous else U_GENERAL
-
-    name = os.path.basename(args.dataset).replace(".lp", "")
-    dataset = Dataset(name)
-    dataset.feed_from_asp(args.dataset)
-    for bnmodel in iter_bnmodels(open(args.bnmodels)):
-        fd, smvfile = tempfile.mkstemp(".smv")
-        os.close(fd)
-        #smvfile = "/tmp/bn.smv"
-        ret = verify(dataset, bnmodel, smvfile, update=update)
-        print("%s/%06d %s" % (name, bnmodel.id, ret))
-        os.unlink(smvfile)
 
