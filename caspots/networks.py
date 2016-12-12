@@ -18,7 +18,7 @@ def domain_of_networks(networks, hypergraph, dataset):
 
     for i, network in enumerate(networks):
         for v, f in network.formulas_iter():
-            f= gringo.Fun("formula", [i, v, formulas[formulas == f].index[0]])
+            f= gringo.Fun("formula", [v, formulas[formulas == f].index[0]])
             domain.append("%s :- model(%d)." % (f,i))
 
     return "%s%s\n" % (fs.to_str(), "\n".join(domain))
