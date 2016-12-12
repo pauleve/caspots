@@ -36,11 +36,13 @@ def crunch_data(answer, predicate, factor):
 def MSE(cd):
     cum = 0
     keys, data = cd
+    n = 0
     for key in keys:
         if key not in data["obs"]:
             continue
+        n += 1
         cum += (data["obs"][key] - data["bin"][key])**2
-    return math.sqrt(cum)
+    return math.sqrt(cum/n)
 
 def count_predicate(answer, predicate):
     return len([p for (p,a) in answer if p == predicate])
