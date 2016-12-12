@@ -105,21 +105,10 @@ def do_mse(args):
                 print("MSE_sample >= MSE_discrete")
             else:
                 print("MSE_sample >= %s" % mse)
-
         if args.check_exact:
-            model = sample.model()
+            network = sample.network(hypergraph)
             trace = sample.trace(dataset)
-
-            fd, smvfile = tempfile.mkstemp(".smv")
-            os.close(fd)
-            if args.debug:
-                dbg("# running NuSMV on %s" % smvfile)
-            exact = modelchecking.verify(trace, model, smvfile, args.semantics)
-            if args.debug:
-                dbg("# NuSMV says %s" % exact)
-            else:
-                os.unlink(smvfile)
-
+            exact = is_true_positive(args, trace, network)
             if exact:
                 break
         else:

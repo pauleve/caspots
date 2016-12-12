@@ -10,6 +10,8 @@ import time
 
 import gringo
 
+from caspo.core import LogicalNetwork
+
 from caspots.config import *
 from caspots import asputils
 from caspots.utils import *
@@ -80,25 +82,21 @@ class ASPSample:
         mse = MSE(cd_guessed)
         return (mse0, mse)
 
-    def model(self):
-        bnmodel = BNModel(self.id)
-        bnmodel.feed_from_asp(self.answer)
-        return bnmodel
+    def network(self, hypergraph):
+        tuples = (f.args() for f in self.atoms if f.name() == "dnf")
+        return LogicalNetwork.from_hypertuples(hypergraph, tuples)
 
     def trace(self, dataset):
         # rewrite dataset using guessed predicate
-        for (p, args) in self.answer:
-            if p == "guessed":
-                eid, t, node, value = asputils.parse_args(args)
+        for a in self.atoms:
+            if a.name() == "guessed":
+                eid, t, node, value = a.args()
                 if node not in dataset.readout:
                     continue
                 if dataset.experiments[eid].obs[t][node] != value:
                     #print(((eid,t,node),dataset.experiments[eid].obs[t][node], value), file=sys.stderr)
                     dataset.experiments[eid].obs[t][node] = value
         return dataset
-
-    def answerset(self):
-        return asp.AnswerSet(["%s(%s)" % a for a in self.answer])
 
 
 class ASPSolver:
