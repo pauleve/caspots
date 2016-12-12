@@ -96,7 +96,7 @@ class Dataset:
                 var = var[3:]
                 sign = int(sign)
                 if var in stimuli:
-                    if sign == 1 or len(graph.predecessors(var)):
+                    if sign == 1 or not len(graph.predecessors(var)):
                         clamps.add((var, sign or -1))
                 elif sign == 1:
                     clamps.add((var, -1))
