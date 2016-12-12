@@ -99,7 +99,7 @@ class Dataset:
                     if sign == 1 or not len(graph.predecessors(var)):
                         clamps.add((var, sign or -1))
                 elif sign == 1:
-                    clamps.add((var, -1))
+                    clamps.add((var[:-1], -1))
             clamps = tuple(clamps)
             exp = exp_of_clamps(clamps)
 
