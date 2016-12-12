@@ -12,13 +12,11 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
     # nodes for which a function is defined
     varying_nodes = set([node for node, _ in network.formulas_iter()])
 
-    # other nodes (necessarily a stimulus)
-    constants = dataset.stimulus.difference(varying_nodes)
+    # nodes with no function (i.e., constant value)
+    constants = set(network.variables()).difference(varying_nodes)
+    #constants = dataset.stimulus.difference(varying_nodes)
 
     clampable = varying_nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
-
-    #vs = set([f.var for f in bnmodel.formula.values()])
-    #constants.update(bnmodel.nodes.difference(vs))
 
     smv = open(destfile, "w")
     smv.write("MODULE main\n")
@@ -72,7 +70,6 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         setup = []
         # enforce initial state of clamped nodes
         for (n, c) in exp.mutations.items():
-            assert (n in constants or n in clampable)
             setup.append("%sn_%s" % ("!" if c < 0 else "", n))
         # specify clamping setting
         for n in clampable:
@@ -86,8 +83,6 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         for t, values in exp.obs.items():
             state = []
             for n, v in values.items():
-                #if n not in varying_nodes and n not in dataset.stimulus:
-                #   continue
                 state.append("%sn_%s" % ("!" if not v else "", n))
             smv.write("E%d_T%d := %s;\n" % (exp.id, t, " & ".join(state)))
 
