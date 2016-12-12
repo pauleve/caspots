@@ -1,7 +1,6 @@
 
 from __future__ import print_function
 
-from functools import partial
 import os
 import sys
 import tempfile
@@ -17,13 +16,6 @@ from .dataset import *
 from caspots import identify
 from caspots import modelchecking
 
-def prepare_output_file(path):
-    dbg("# writing to '%s'" % path)
-
-def debug_file(args, name):
-    path = os.path.join(args.debug_dir,name)
-    prepare_output_file(path)
-    return path
 
 def read_pkn(args):
     graph = Graph.read_sif(args.pkn)

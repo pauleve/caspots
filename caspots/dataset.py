@@ -114,7 +114,6 @@ class Dataset:
 
     def to_funset(self):
         fs = funset(self.setup)
-
         clampings = []
         for exp in sorted(self.experiments.values(), key=lambda e: e.id):
             i = exp.id
@@ -126,41 +125,8 @@ class Dataset:
                     fs.add(gringo.Fun('obs', [i, time, var, dval]))
         clampings = ClampingList(clampings)
         fs.update(clampings.to_funset("exp"))
-
         fs.add(gringo.Fun('dfactor', [self.dfactor]))
         return fs
-
-    """
-    def feed_from_asp(self, fs):
-        def key(f):
-            if f.name() == "exp":
-                return 0
-            return 10
-        for f in sorted(fs, key=key):
-            p = f.name()
-            args = f.args()
-            if p == "stimulus":
-                self.stimulus.add(args[0])
-            elif p == "inhibitor":
-                self.inhibitors.add(args[0])
-            elif p == "readout":
-                self.readout.add(args[0])
-            elif p == "exp":
-                id = args[0]
-                self.experiments[id] = Experiment(id)
-            elif p == "dfactor":
-                assert args[0] == 100, args
-                continue
-            elif p == "clamped":
-                eid, node, clamp = args
-                self.experiments[eid].add_mutation(node, clamp)
-            elif p == "obs":
-                eid, t, node, value = args
-                value = 1 if value >= 50 else 0
-                self.experiments[eid].add_obs(t, node, value)
-            else:
-                raise Exception("unknown clause '%s'" % p)
-    """
 
     def __str__(self):
         buf = "%s %s %s\n" % ("#"*10, self.name, "#"*10)
