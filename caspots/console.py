@@ -1,6 +1,7 @@
 
 from __future__ import print_function
 
+from functools import partial
 import os
 import sys
 import tempfile
@@ -56,6 +57,16 @@ def read_domain(args, hypergraph, dataset, outf):
         return outf
     else:
         return None
+
+def is_true_positive(args, dataset, network):
+    fd, smvfile = tempfile.mkstemp(".smv")
+    os.close(fd)
+    exact = modelchecking.verify(dataset, network, smvfile, args.semantics)
+    if args.debug:
+        dbg("# %s" % smvfile)
+    else:
+        os.unlink(smvfile)
+    return exact
 
 def do_pkn2lp(args):
     funset(read_pkn(args)[1]).to_file(args.output)
@@ -147,12 +158,6 @@ def do_identify(args):
             output.write("%d solution(s)\r" % c["found"])
         output.flush()
 
-    def is_true_positive(bid, network):
-        fd, smvfile = tempfile.mkstemp(".smv")
-        os.close(fd)
-        exact = modelchecking.verify(dataset, network, smvfile, args.semantics)
-        os.unlink(smvfile)
-        return exact
 
     def on_model(model):
         c["found"] += 1
@@ -160,7 +165,7 @@ def do_identify(args):
         tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
         network = LogicalNetwork.from_hypertuples(hypergraph, tuples)
         if args.true_positives:
-            if is_true_positive(c["found"], network):
+            if is_true_positive(args, dataset, network):
                 c["tp"] += 1
             else:
                 skip = True
@@ -175,24 +180,17 @@ def do_identify(args):
         print("%d/%d true positives [rate: %0.2f%%]" \
             % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
 
-    networks.to_csv(args.output)
+    if networks:
+        networks.to_csv(args.output)
+    else:
+        print("No solutions!")
     os.unlink(domainlp)
 
 
 def do_validate(args):
-    pkn, graph = read_pkn(args)
+    graph, hypergraph = read_pkn(args)
     dataset = read_dataset(args, graph)
     networks = read_networks(args)
-
-    def is_true_positive(bid, network):
-        fd, smvfile = tempfile.mkstemp(".smv")
-        os.close(fd)
-        exact = modelchecking.verify(dataset, network, smvfile, args.semantics)
-        if args.debug:
-            dbg("# %s" % smvfile)
-        else:
-            os.unlink(smvfile)
-        return exact
 
     tp = 0
     c = 0
@@ -201,7 +199,7 @@ def do_validate(args):
         c += 1
         sys.stderr.write("%d/%d... " % (c,nb))
         sys.stderr.flush()
-        if is_true_positive(c, network):
+        if is_true_positive(args, dataset, network):
             tp += 1
         sys.stderr.write("%d/%d true positives\r" % (tp,c))
     res = "%d/%d true positives [rate: %0.2f%%]" % (tp, nb, (100.*tp)/nb)

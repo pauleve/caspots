@@ -46,10 +46,6 @@ class Experiment:
 class Dataset:
     def __init__(self, name, dfactor=100, discretize="round"):
         self.name = name
-        self.stimulus = set()
-        self.inhibitors = set()
-        self.readout = set()
-        self.experiments = {}
         self.dfactor = dfactor
         self.discretize = getattr(self, "discretize_%s" % discretize)
 
@@ -75,6 +71,11 @@ class Dataset:
         inhibitors = [c[3:-1] for c in [c for c in df.columns if is_inhibitor(c)]]
         readouts = [c[3:] for c in [c for c in df.columns if is_readout(c)]]
         self.setup = Setup(stimuli, inhibitors, readouts)
+
+        self.stimulus = set(self.setup.stimuli)
+        self.inhibitors = set(self.setup.inhibitors)
+        self.readout = set(self.setup.readouts)
+        self.experiments = {}
 
         exp_t = {}
         def exp_of_clamps(clamps):
