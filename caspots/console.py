@@ -95,7 +95,6 @@ def do_mse(args):
 
     identifier = identify.ASPSolver(termset, args, domain=domain)
 
-
     first = True
     exact = False
     for sample in identifier.solution_samples():

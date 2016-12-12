@@ -21,9 +21,10 @@ def crunch_data(answer, predicate, factor):
         "bin": {}
     }
     keys = set()
-    for (p, args) in answer:
+    for a in answer:
+        p = a.name()
         if p in ["obs", predicate]:
-            args = asputils.parse_args(args)
+            args = a.args()
             key = tuple(args[:3])
             val = args[3]
             if p == "obs":
@@ -45,24 +46,13 @@ def MSE(cd):
     return math.sqrt(cum/n)
 
 def count_predicate(answer, predicate):
-    return len([p for (p,a) in answer if p == predicate])
+    return len([a for a in answer if a.name() == predicate])
 
 class ASPSample:
-    def __init__(self, result, opts):
+    def __init__(self, opts, model):
         self.opts = opts
-        mode = 0
-        for line in result:
-            line = line.strip()
-            if mode == 0:
-                if line.startswith("Answer: "):
-                    self.id = int(line[7:])
-                    mode = 1
-            elif mode == 1:
-                self.answer = parse_answer(line)
-                mode = 2
-            elif mode == 2:
-                if line.startswith("Optimization: "):
-                    self.optimization = line.split(" ")[1]
+        self.atoms = model.atoms()
+        self.optimization = model.optimization()
 
     def weight(self):
         return self.optimization
@@ -71,21 +61,21 @@ class ASPSample:
         predicates = ["formula", "dnf", "clause"]
         if self.opts.enum_traces:
             predicates += ["guessed"]
-        clauses = ["%s(%s)" % (p,a) for (p,a) in self.answer if p in predicates]
+        clauses = [a for a in self.atoms if a.name() in predicates]
         if self.opts.family == "all":
-            nb_formula = count_predicate(answer, "formula")
-            nb_dnf = count_predicate(answer, "dnf")
-            nb_clause = count_predicate(answer, "clause")
+            nb_formula = count_predicate(self.atoms, "formula")
+            nb_dnf = count_predicate(self.atoms, "dnf")
+            nb_clause = count_predicate(self.atoms, "clause")
             clauses += [
                 "%d{formula(V,I): node(V,I)}%d" % (nb_formula, nb_formula),
                 "%d{dnf(I,J): hyper(I,J,N)}%d" % (nb_dnf, nb_dnf),
                 "%d{clause(J,V,B): edge(J,V,B)}%d" % (nb_clause, nb_clause)
             ]
-        return ":- %s." % ", ".join(clauses)
+        return ":- %s." % ", ".join(map(str, clauses))
 
     def mse(self):
-        cd_measured = crunch_data(self.answer, "measured", self.opts.factor)
-        cd_guessed = crunch_data(self.answer, "guessed", self.opts.factor)
+        cd_measured = crunch_data(self.atoms, "measured", self.opts.factor)
+        cd_guessed = crunch_data(self.atoms, "guessed", self.opts.factor)
         mse0 = MSE(cd_measured)
         mse = MSE(cd_guessed)
         return (mse0, mse)
@@ -124,31 +114,34 @@ class ASPSolver:
         else:
             self.domain = [domain]
 
-    def sample(self, first, *args):
-        gringo_cmd = ["gringo"] + self.domain + [
-            aspf("supportConsistency.lp"),
-            aspf("normalize.lp"),
-            aspf("showMeasured.lp")]
-        gringo_cmd += ["-"]
+    def default_control(self, *args):
+        control = gringo.Control(["--conf=trendy", "--stats",
+                            "--opt-strat=usc"] + list(args))
+        for f in self.domain:
+            control.load(f)
+        control.load(aspf("supportConsistency.lp"))
+        control.load(aspf("normalize.lp"))
+        control.add("base", [], self.data)
+        return control
+
+    def sample(self, first, scripts=[], weight=None):
+        control = self.default_control()
+        if weight:
+            control.load("tolerance.lp")
+            control.add("base", [], "#const minWeight=%s. #const maxWeight=%s" %
+                                        (weight,weight))
+
+        control.load(aspf("showMeasured.lp"))
         if self.opts.family == "subset":
-            gringo_cmd.append(aspf("minimizeSizeOnly.lp"))
+            control.load(aspf("minimizeSizeOnly.lp"))
         if first:
-            gringo_cmd += [aspf("minimizeWeightOnly.lp")]
-        gringo_cmd += list(args)
-        clasp_cmd = ["clingo", "--mode=clasp",
-                        "--conf=trendy", "--stats", "--opt-strat=usc",
-                        "--quiet=1"]
-        if self.debug:
-            dbg("# %s" % (" ".join(gringo_cmd + ["|"] + clasp_cmd)))
-        gringo = Popen(gringo_cmd, stdin=PIPE, stdout=PIPE)
-        clasp = Popen(clasp_cmd, stdin=gringo.stdout, stdout=PIPE)
-        gringo.stdin.write(self.data)
-        gringo.stdin.close()
-        sample = ASPSample(clasp.stdout, opts=self.opts)
-        clasp.stdout.close()
-        clasp.wait()
-        self.retcode = clasp.returncode
-        return sample
+            control.load(aspf("minimizeWeightOnly.lp"))
+        for f in scripts:
+            control.load(f)
+        control.ground([("base", [])])
+        with control.solve_iter() as solutions:
+            for model in solutions:
+                return ASPSample(self.opts, model)
 
     def solution_samples(self):
         i = 1
@@ -164,46 +157,34 @@ class ASPSolver:
         with open(excludelp, "w") as f:
             f.write("%s\n" % s.asp_exclusion())
 
-        args = [aspf("tolerance.lp"), excludelp,
-            "-c", "minWeight=%s" % weight,
-            "-c", "maxWeight=%s" % weight]
-
+        args = [excludelp]
         while True:
-            s = self.sample(False, *args)
-            if self.retcode in [10, 30]:
+            s = self.sample(False, args, weight=weight)
+            if s:
                 i += 1
                 if self.debug:
                     dbg("# model %d" %i)
                 yield s
                 with open(excludelp, "a") as f:
                     f.write("%s\n" % s.asp_exclusion())
-            elif self.retcode == 20:
+            else:
                 print("# Enumeration complete")
                 break
-            else:
-                print("# ERROR")
-                break
-
         os.unlink(excludelp)
 
     def solutions(self, on_model, on_model_weight=None, limit=0,
                     force_weight=None):
 
-        control = gringo.Control(["--conf=trendy", "--stats", "0", "--opt-strat=usc"])
+        control = self.default_control("0")
 
         do_mincard = self.opts.family == "mincard" \
             or self.opts.force_size is not None
         do_subsets = self.opts.family == "subset" \
             or (self.opts.family =="mincard" and self.opts.mincard_tolerance)
 
-        for f in self.domain:
-            control.load(f)
-        control.load(aspf("supportConsistency.lp"))
         control.load(aspf("minimizeWeightOnly.lp"))
         if do_mincard:
             control.load(aspf("minimizeSizeOnly.lp"))
-        control.load(aspf("normalize.lp"))
-        control.add("base", [], self.data)
 
         control.ground([("base", [])])
 
