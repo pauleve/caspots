@@ -10,7 +10,8 @@ from caspo.core.setup import Setup
 from caspo.core.literal import Literal
 from caspo.core.clamping import Clamping, ClampingList
 
-from asputils import *
+from .asputils import *
+from .utils import *
 
 
 class Experiment:
@@ -29,6 +30,11 @@ class Experiment:
             self.dobs[t] = {}
         self.obs[t][node] = value
         self.dobs[t][node] = dvalue
+
+    def commit(self):
+        if len(self.obs) == 1:
+            warning("Experiment with mutations %s has only one data point!"\
+                        % self.mutations)
 
     def __str__(self):
         buf = "Experiment(%d):\n" % self.id
@@ -111,6 +117,9 @@ class Dataset:
                 dvalue = self.discretize(fvalue)
                 bvalue = self.binarize(dvalue)
                 exp.add_obs(time, var, bvalue, dvalue)
+
+        for exp in self.experiments.values():
+            exp.commit()
 
     def to_funset(self):
         fs = funset(self.setup)

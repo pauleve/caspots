@@ -111,6 +111,8 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
     def ctl_of_exp(exp):
         ts = list(exp.obs.keys())
         t0 = ts.pop(0)
+        if not ts:
+            return "TRUE"
         ctl = "(E%d_SETUP & E%d_T%d) -> " % (exp.id, exp.id, t0)
         for t in  ts:
             ctl += "EF (E%d_T%d & " % (exp.id, t)

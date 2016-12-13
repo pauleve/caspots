@@ -6,3 +6,6 @@ import sys
 def dbg(msg):
     print(msg, file=sys.stderr)
 
+def warning(msg):
+    print("WARNING: %s" % msg, file=sys.stderr)
+
