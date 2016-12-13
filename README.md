@@ -4,13 +4,8 @@
 
 - python 2.7
 - caspo (pip install caspo)
-
-From http://potassco.sourceforge.net:
-- clasp >= 3.1
-- gringo >= 4.4
-- gringo python module (shipped with gringo)
-On Ubuntu, installation the gringo package should satisfy those dependencies.
-
+- gringo python module (shipped with gringo from http://potassco.sourceforge.net)
+  On Ubuntu, install the gringo package.
 - NuSMV >= 2.5 - http://nusmv.fbk.eu/NuSMV/download/getting-v2.html
 
 ## Installation
@@ -24,9 +19,23 @@ A docker image is also available
 
 	docker pull pauleve/caspots
 
-You can then create an alias to use `caspots` command:
+### Docker usage
+
+The entry point of the docker image is the program `caspots`.
+Hence you can run a image directly with `docker run`.
+You can create an alias to use `caspots` command:
 
 	alias caspots='docker run --rm --volume "$PWD":/wd --workdir /wd pauleve/caspots'
+
+If you have multiple `caspots` command to run in the same directoy, it is
+recommended to first create a container and then execute caspots commands in it.
+
+	alias start-caspots='docker create --name caspots -it --volume "$PWD":/wd --workdir /wd --entrypoint=/bin/bash pauleve/caspots && docker start caspots'
+	alias docker-caspots='docker exec caspots caspots'
+	alias stop-caspots='docker stop caspots && docker rm caspots'
+
+First type `start-caspots`, then use as many as `docker-caspots` calls you want.
+Do not forget to call `stop-caspots` when the work is done.
 
 
 ## Usage
