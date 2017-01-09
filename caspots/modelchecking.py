@@ -9,11 +9,14 @@ MODES = [U_GENERAL, U_ASYNC]
 
 def make_smv(dataset, network, destfile, update=U_GENERAL):
 
+    # nodes referenced in dataset
+    dvars = dataset.setup.nodes.union(network.variables())
+
     # nodes for which a function is defined
     varying_nodes = set([node for node, _ in network.formulas_iter()])
 
     # nodes with no function (i.e., constant value)
-    constants = set(network.variables()).difference(varying_nodes)
+    constants = dvars.difference(varying_nodes)
     #constants = dataset.stimulus.difference(varying_nodes)
 
     clampable = varying_nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
@@ -128,7 +131,7 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
 
 def verify(dataset, network, destfile, *args, **kwargs):
     smvfile = make_smv(dataset, network, destfile, *args, **kwargs)
-    output = subprocess.check_output(["NuSMV", "-dcx", smvfile])
+    output = subprocess.check_output(["NuSMV", "-coi", "-dcx", smvfile])
     ret = output.strip().split()[-1].decode()
     return ret == "true"
 
