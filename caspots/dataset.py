@@ -33,8 +33,8 @@ class Experiment:
 
     def commit(self):
         if len(self.obs) == 1:
-            warning("Experiment with mutations %s has only one data point (at time=%d)!"\
-                        % (self.mutations, list(self.obs.keys())[0]))
+            warning("Experiment %d with clamping %s has only one data point (at time=%d)!"\
+                        % (self.id, self.mutations, list(self.obs.keys())[0]))
 
     def __str__(self):
         buf = "Experiment(%d):\n" % self.id
