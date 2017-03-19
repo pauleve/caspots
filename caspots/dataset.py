@@ -33,8 +33,8 @@ class Experiment:
 
     def commit(self):
         if len(self.obs) == 1:
-            warning("Experiment with mutations %s has only one data point!"\
-                        % self.mutations)
+            warning("Experiment with mutations %s has only one data point (at time=%d)!"\
+                        % (self.mutations, list(self.obs.keys())[0]))
 
     def __str__(self):
         buf = "Experiment(%d):\n" % self.id
@@ -84,17 +84,27 @@ class Dataset:
         self.experiments = {}
 
         exp_t = {}
-        def exp_of_clamps(clamps):
-            if clamps not in exp_t:
+        order = {}
+        def exp_of_clamps(clamps, time=None):
+            if time is not None:
+                key = (clamps, time)
+                if key not in order:
+                    order[key] = 1
+                else:
+                    order[key] += 1
+                key = (clamps, order[key])
+            else:
+                key = clamps
+            if key not in exp_t:
                 eid = len(exp_t)
                 exp = Experiment(eid)
                 for node, clamp in clamps:
                     exp.add_mutation(node, clamp)
                 self.experiments[eid] = exp
-                exp_t[clamps] = exp
+                exp_t[key] = exp
                 return exp
             else:
-                return exp_t[clamps]
+                return exp_t[key]
 
         for i, row in df.iterrows():
             clamps = set()
@@ -107,7 +117,13 @@ class Dataset:
                 elif sign == 1:
                     clamps.add((var[:-1], -1))
             clamps = tuple(clamps)
-            exp = exp_of_clamps(clamps)
+
+            times = list(set(map(int,row.filter(regex='^DA:').values)))
+            if len(times) == 1:
+                time = times[0]
+            else:
+                time = None
+            exp = exp_of_clamps(clamps, time)
 
             for var, fvalue in row.filter(regex='^DV').iteritems():
                 if np.isnan(fvalue):
