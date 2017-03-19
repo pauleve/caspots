@@ -112,7 +112,7 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
     smv.write(");\n")
 
     def ctl_of_exp(exp):
-        ts = list(exp.obs.keys())
+        ts = list(sorted(exp.obs.keys()))
         t0 = ts.pop(0)
         if not ts:
             return "TRUE"
