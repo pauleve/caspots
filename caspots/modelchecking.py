@@ -19,6 +19,15 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
     constants = dvars.difference(varying_nodes)
     #constants = dataset.stimulus.difference(varying_nodes)
 
+    dirty_start = set()
+    for exp in dataset.experiments.values():
+        if 0 not in exp.obs:
+            dirty_start.update(dataset.readout)
+            break
+        else:
+            readouts0 = set(exp.obs[0].keys())
+            dirty_start.update(dataset.readout.difference(readouts0))
+
     clampable = varying_nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
 
     smv = open(destfile, "w")
@@ -32,15 +41,21 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         smv.write("\tu_%s: boolean;\n" % n)
         if n in clampable:
             smv.write("\tC_%s: {0,1,-1};\n" % n)
+    for n in dirty_start:
+        smv.write("\tdirty_%s: boolean;\n" % n)
 
     smv.write("\nASSIGN\n")
     smv.write("next(start) := FALSE;\n")
+    for n in dirty_start:
+        smv.write("next(dirty_%s) := FALSE;\n" % n)
     for n in constants:
         smv.write("next(n_%s) := n_%s;\n" % (n,n))
     for n in varying_nodes:
         smv.write("next(n_%s) := case " % n)
         if n not in dataset.readout:
             smv.write("start: {TRUE, FALSE}; ")
+        elif n in dirty_start:
+            smv.write("start & dirty_%s: {TRUE, FALSE}; " % n)
         smv.write("u_%s: F_%s; TRUE: n_%s; esac;\n" % (n, n, n))
         if n in clampable:
             smv.write("next(C_%s) := C_%s;\n" % (n, n))
@@ -83,10 +98,17 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
                 setup.append("C_%s=0" % n)
 
         smv.write("E%d_SETUP := %s;\n" % (exp.id, " & ".join(setup) or "TRUE"))
+        if 0 not in exp.obs:
+            smv.write("E%d_T0 := %s;\n" % (exp.id, t,
+                " & ".join(["dirty_%s" % n for n in dirty_start])))
         for t, values in exp.obs.items():
             state = []
             for n, v in values.items():
                 state.append("%sn_%s" % ("!" if not v else "", n))
+            if t == 0:
+                for n in dirty_start:
+                    neg = "!" if n not in values else ""
+                    state.append("%sdirty_%s" % (neg, n))
             smv.write("E%d_T%d := %s;\n" % (exp.id, t, " & ".join(state)))
 
     fpconds = ["n_%s = F_%s" % (n, n) for n in varying_nodes]
@@ -113,13 +135,11 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
 
     def ctl_of_exp(exp):
         ts = list(sorted(exp.obs.keys()))
-        if ts[0] != 0:
-            ctl = "(E%d_SETUP) -> " % exp.id
-        else:
+        ctl = "(E%d_SETUP & E%d_T0) -> " % (exp.id, exp.id)
+        if ts[0] == 0:
             t0 = ts.pop(0)
             if not ts:
                 return "TRUE"
-            ctl = "(E%d_SETUP & E%d_T%d) -> " % (exp.id, exp.id, t0)
         for t in ts:
             ctl += "EF (E%d_T%d & " % (exp.id, t)
         ctl = ctl[:-2] + ")"*len(ts)

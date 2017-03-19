@@ -134,8 +134,14 @@ class Dataset:
                 bvalue = self.binarize(dvalue)
                 exp.add_obs(time, var, bvalue, dvalue)
 
+        todel = []
         for exp in self.experiments.values():
             exp.commit()
+            if len(exp.obs) == 1 and 0 in exp.obs:
+                todel.append(exp.id)
+        for eid in todel:
+            del self.experiments[eid]
+
 
     def to_funset(self):
         fs = funset(self.setup)
