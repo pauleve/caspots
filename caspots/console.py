@@ -154,17 +154,17 @@ def do_identify(args):
             return
         networks.append(network)
 
-    identifier.solutions(on_model, limit=args.limit, force_weight=args.force_weight)
-    print("%d solution(s) for the over-approximation" % c["found"])
-    if args.true_positives:
-        print("%d/%d true positives [rate: %0.2f%%]" \
-            % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
+    try:
+        identifier.solutions(on_model, limit=args.limit, force_weight=args.force_weight)
+    finally:
+        print("%d solution(s) for the over-approximation" % c["found"])
+        if args.true_positives and c["found"]:
+            print("%d/%d true positives [rate: %0.2f%%]" \
+                % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
+        if networks:
+            networks.to_csv(args.output)
+        os.unlink(domainlp)
 
-    if networks:
-        networks.to_csv(args.output)
-    else:
-        print("No solutions!")
-    os.unlink(domainlp)
 
 
 def do_validate(args):
@@ -175,18 +175,24 @@ def do_validate(args):
     tp = 0
     c = 0
     nb = len(networks)
-    for network in networks:
-        c += 1
-        sys.stderr.write("%d/%d... " % (c,nb))
-        sys.stderr.flush()
-        if is_true_positive(args, dataset, network):
-            tp += 1
-        sys.stderr.write("%d/%d true positives\r" % (tp,c))
-    res = "%d/%d true positives [rate: %0.2f%%]" % (tp, nb, (100.*tp)/nb)
-    print(res)
-    if args.tee:
-        with open(args.tee, "w") as f:
-            f.write("%s\n" % res)
+    tp_indexes = []
+    try:
+        for network in networks:
+            c += 1
+            sys.stderr.write("%d/%d... " % (c,nb))
+            sys.stderr.flush()
+            if is_true_positive(args, dataset, network):
+                tp_indexes.append(c-1)
+                tp += 1
+            sys.stderr.write("%d/%d true positives\r" % (tp,c))
+        res = "%d/%d true positives [rate: %0.2f%%]" % (tp, nb, (100.*tp)/nb)
+        print(res)
+        if args.tee:
+            with open(args.tee, "w") as f:
+                f.write("%s\n" % res)
+    finally:
+        if args.output and tp_indexes:
+            networks[tp_indexes].to_csv(args.output)
 
 
 from argparse import ArgumentParser
@@ -286,6 +292,8 @@ def run():
         help="Validate only networks from given row (starting at 0)")
     parser_validate.add_argument("--range-length", type=int, default=0,
         help="Number of networks to validate (0 means all)")
+    parser_validate.add_argument("--output", 
+        help="output true positive network to file (csv format)")
     parser_validate.add_argument("--tee", type=str, default=None,
         help="Output result to given file (in addition to stdout).")
     parser_validate.add_argument("networks", help="network set (csv format)")
