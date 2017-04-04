@@ -125,7 +125,7 @@ class ASPSolver:
     def sample(self, first, scripts=[], weight=None):
         control = self.default_control()
         if weight:
-            control.load("tolerance.lp")
+            control.load(aspf("tolerance.lp"))
             control.add("base", [], "#const minWeight=%s. #const maxWeight=%s" %
                                         (weight,weight))
 
