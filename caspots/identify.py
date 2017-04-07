@@ -123,11 +123,17 @@ class ASPSolver:
         return control
 
     def sample(self, first, scripts=[], weight=None):
-        control = self.default_control()
+        args = []
+        if weight:
+            if isinstance(weight, list):
+                assert len(weight) == 1
+                weight = weight[0]
+            args += ["-c", "minWeight=%d" % weight,
+                    "-c", "maxWeight=%d" % weight]
+
+        control = self.default_control(*args)
         if weight:
             control.load(aspf("tolerance.lp"))
-            control.add("base", [], "#const minWeight=%s. #const maxWeight=%s" %
-                                        (weight,weight))
 
         control.load(aspf("showMeasured.lp"))
         if self.opts.family == "subset":

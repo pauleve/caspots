@@ -4,8 +4,8 @@
 #const maxErrors=#supremum.
 #const minSize=#infimum.
 #const maxSize=#supremum.
-#const minWeight=#infimum.
-#const maxWeight=#supremum.
+%#const minWeight=#infimum.
+%#const maxWeight=#supremum.
 %:- not minErrors #sum {1,E,T,S : error(E,T,S); 1,E,T,L,Y : mynewerror(E,T,L,Y)} maxErrors.
 :- not minSize #sum {L,I,J : dnf(I,J) , hyper(I,J,L)} maxSize.
 %:- not minWeight #sum {Erg,E,T,S : error(E,T,S), obs(E,T,S,V), Erg=50-V, V < 50; Erg,E,T,L,Y : mynewerror(E,T,L,Y), obs(E,T,L,V), Erg=50-V, V < 50;
