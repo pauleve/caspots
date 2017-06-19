@@ -50,6 +50,14 @@ def read_domain(args, hypergraph, dataset, outf):
     else:
         return None
 
+def read_restriction(args, hypergraph, outf):
+    if args.partial_bn:
+        asp = restrict_with_partial_bn(hypergraph, args.partial_bn)
+        with open(outf, "w") as fd:
+            fd.write(asp)
+        return outf
+    return None
+
 def is_true_positive(args, dataset, network):
     fd, smvfile = tempfile.mkstemp(".smv")
     os.close(fd)
@@ -85,7 +93,12 @@ def do_mse(args):
     os.close(fd)
     domain = read_domain(args, hypergraph, dataset, domainlp)
 
-    identifier = identify.ASPSolver(termset, args, domain=domain)
+    fd, restrictlp = tempfile.mkstemp(".lp")
+    os.close(fd)
+    restrict = read_restriction(args, hypergraph, restrictlp)
+
+    identifier = identify.ASPSolver(termset, args, domain=domain,
+                                    restrict=restrict)
 
     first = True
     exact = False
@@ -112,6 +125,7 @@ def do_mse(args):
         else:
             print("MSE_sample may be under-estimated (no True Positive found)")
     os.unlink(domainlp)
+    os.unlink(restrictlp)
 
 
 def do_identify(args):
@@ -123,7 +137,12 @@ def do_identify(args):
     os.close(fd)
     domain = read_domain(args, hypergraph, dataset, domainlp)
 
-    identifier = identify.ASPSolver(termset, args, domain=domain)
+    fd, restrictlp = tempfile.mkstemp(".lp")
+    os.close(fd)
+    restrict = read_restriction(args, hypergraph, restrictlp)
+
+    identifier = identify.ASPSolver(termset, args, domain=domain,
+                                    restrict=restrict)
 
     networks = LogicalNetworkList.from_hypergraph(hypergraph)
 
@@ -164,6 +183,7 @@ def do_identify(args):
         if networks:
             networks.to_csv(args.output)
         os.unlink(domainlp)
+        os.unlink(restrictlp)
 
 
 
@@ -246,6 +266,7 @@ def run():
     domain_parser = ArgumentParser(add_help=False,
         parents=[networks_parser])
     domain_parser.add_argument("--networks", help="Networks to as domain (.csv)")
+    domain_parser.add_argument("--partial-bn", help="Partial specification of the Boolean network (.bn)")
 
     parser_pkn2lp = subparsers.add_parser("pkn2lp",
         help="Export PKN (sif format) to ASP (lp format)",

@@ -100,7 +100,7 @@ class ASPSample:
 
 
 class ASPSolver:
-    def __init__(self, termset, opts, domain=None):
+    def __init__(self, termset, opts, domain=None, restrict=None):
         self.termset = termset
         self.data = termset.to_str()
         self.opts = opts
@@ -109,6 +109,8 @@ class ASPSolver:
             self.domain = [aspf("guessBN.lp")]
             if opts.fully_controllable:
                 self.domain.append(aspf("guessBN-controllable.lp"))
+            if restrict:
+                self.domain.append(restrict)
         else:
             self.domain = [domain]
 

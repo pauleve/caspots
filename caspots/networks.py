@@ -5,6 +5,8 @@ import gringo
 
 import pandas as pd
 
+from caspo.core import Clause
+
 from .asputils import *
 
 def domain_of_networks(networks, hypergraph, dataset):
@@ -23,3 +25,20 @@ def domain_of_networks(networks, hypergraph, dataset):
 
     return "%s%s\n" % (fs.to_str(), "\n".join(domain))
 
+def restrict_with_partial_bn(hypergraph, partial_bn_file):
+    asp = []
+    with open(partial_bn_file) as f:
+        for line in f:
+            line = line.strip().replace(' ','')
+            if not line:
+                continue
+            a, clauses = line.split("=")
+            a = a.strip()
+            ai = hypergraph.nodes[hypergraph.nodes == a].index[0]
+            clauses = set([Clause.from_str(c) for c in clauses.split("|")])
+            for hi in hypergraph.hyper[hypergraph.hyper == ai].index:
+                if hypergraph.clauses[hi] in clauses:
+                    asp.append("dnf({0},{1}).".format(ai, hi))
+                else:
+                    asp.append(":- dnf({0},{1}).".format(ai,hi))
+    return "\n".join(asp)
