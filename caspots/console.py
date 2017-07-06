@@ -158,8 +158,9 @@ def do_identify(args):
         output.flush()
 
 
-    def update(network, exact):
-        c["found"] += 1
+    def update(network, exact, new=True):
+        if new:
+            c["found"] += 1
         if args.true_positives and exact:
             c["tp"] += 1
         show_stats()
@@ -174,11 +175,18 @@ def do_identify(args):
         update(network, tp)
 
     if args.true_positives:
-        assert not args.enum_traces, "We do not support enumeration over traces yet"
+        known_networks = set()
         def on_model_with_errors(sample):
             network = sample.network(hypergraph)
             trace = sample.trace(dataset)
-            update(network, is_true_positive(args, trace, network))
+            if opts.enum_traces:
+                h = hash(tuple(network.to_array(hypergraph.mappings)))
+                new = h not in known_networks
+                if new:
+                    known_networks.add(h)
+            else:
+                new = True
+            update(network, is_true_positive(args, trace, network), new)
     else:
         on_model_with_errors = None
 
