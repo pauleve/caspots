@@ -9,21 +9,27 @@ from caspo.core import Clause
 
 from .asputils import *
 
-def domain_of_networks(networks, hypergraph, dataset):
-    fs = funset(networks)
+def domain_of_networks(networks):
+
+    hg = networks.hg
+
     domain = ["1{%s}1." % ("; ".join(["model(%d)" % i for i in range(len(networks))]))]
 
-    formulas = set()
-    for network in networks:
-        formulas = formulas.union(it.imap(lambda (_, f): f, network.formulas_iter()))
-    formulas = pd.Series(list(formulas))
-
-    for i, network in enumerate(networks):
-        for v, f in network.formulas_iter():
-            f= gringo.Fun("formula", [v, formulas[formulas == f].index[0]])
+    for i,network in enumerate(networks):
+        m = gringo.Fun("model", [i])
+        for v,formula in network.formulas_iter():
+            variable = hg.nodes[hg.nodes == v].index[0]
+            f = gringo.Fun("formula", [v, variable])
             domain.append("%s :- model(%d)." % (f,i))
+            for clause in formula:
+                clause_idx = hg.clauses_idx[clause]
+                d = gringo.Fun("dnf",[variable, clause_idx])
+                domain.append("%s :- %s." % (d,m))
+                for variable, sign in clause:
+                    c = gringo.Fun("clause", [clause_idx, variable, sign])
+                    domain.append("%s :- %s." % (c,m))
 
-    return "%s%s\n" % (fs.to_str(), "\n".join(domain))
+    return "%s\n" % "\n".join(domain)
 
 def restrict_with_partial_bn(hypergraph, partial_bn_file):
     asp = []

@@ -38,17 +38,17 @@ def read_networks(args):
             end = args.range_from + args.range_length
         indexes = range(args.range_from, end)
         networks = networks[indexes]
-    return networks
+    return networks, networks.hg
 
 def read_domain(args, hypergraph, dataset, outf):
     if args.networks:
-        networks = read_networks(args)
-        out = domain_of_networks(networks, hypergraph, dataset)
+        networks, hypergraph = read_networks(args)
+        out = domain_of_networks(networks)
         with open(outf, "w") as fd:
             fd.write(out)
-        return outf
+        return outf, hypergraph
     else:
-        return None
+        return None, hypergraph
 
 def read_restriction(args, hypergraph, outf):
     if args.partial_bn:
@@ -79,19 +79,19 @@ def do_midas2lp(args):
 def do_results2lp(args):
     graph, hypergraph = read_pkn(args)
     dataset = read_dataset(args, graph)
-    networks = read_networks(args)
-    out = domain_of_networks(networks, hypergraph, dataset)
+    networks, hypergraph = read_networks(args)
+    out = domain_of_networks(networks)
     print(out)
 
 def do_mse(args):
     graph, hypergraph = read_pkn(args)
     dataset = read_dataset(args, graph)
 
-    termset = funset(hypergraph, dataset)
-
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
-    domain = read_domain(args, hypergraph, dataset, domainlp)
+    domain, hypergraph = read_domain(args, hypergraph, dataset, domainlp)
+
+    termset = funset(hypergraph, dataset)
 
     fd, restrictlp = tempfile.mkstemp(".lp")
     os.close(fd)
@@ -131,11 +131,12 @@ def do_mse(args):
 def do_identify(args):
     graph, hypergraph = read_pkn(args)
     dataset = read_dataset(args, graph)
-    termset = funset(hypergraph, dataset)
 
     fd, domainlp = tempfile.mkstemp(".lp")
     os.close(fd)
-    domain = read_domain(args, hypergraph, dataset, domainlp)
+    domain, hypergraph = read_domain(args, hypergraph, dataset, domainlp)
+
+    termset = funset(hypergraph, dataset)
 
     fd, restrictlp = tempfile.mkstemp(".lp")
     os.close(fd)
@@ -170,8 +171,7 @@ def do_identify(args):
     def on_model(model):
         tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
         network = LogicalNetwork.from_hypertuples(hypergraph, tuples)
-        if args.true_positives:
-            tp = is_true_positive(args, dataset, network)
+        tp = args.true_positives and is_true_positive(args, dataset, network)
         update(network, tp)
 
     if args.true_positives:
@@ -179,7 +179,7 @@ def do_identify(args):
         def on_model_with_errors(sample):
             network = sample.network(hypergraph)
             trace = sample.trace(dataset)
-            if opts.enum_traces:
+            if args.enum_traces:
                 h = hash(tuple(network.to_array(hypergraph.mappings)))
                 new = h not in known_networks
                 if new:
@@ -208,7 +208,7 @@ def do_identify(args):
 def do_validate(args):
     graph, hypergraph = read_pkn(args)
     dataset = read_dataset(args, graph)
-    networks = read_networks(args)
+    networks, hypergraph = read_networks(args)
 
     tp = 0
     c = 0
