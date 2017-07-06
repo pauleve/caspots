@@ -128,7 +128,7 @@ class ASPSolver:
         args = []
         if weight:
             if isinstance(weight, list):
-                assert len(weight) == 1
+                #assert len(weight) == 1, weight
                 weight = weight[0]
             args += ["-c", "minWeight=%d" % weight,
                     "-c", "maxWeight=%d" % weight]

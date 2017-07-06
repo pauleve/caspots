@@ -158,23 +158,33 @@ def do_identify(args):
         output.flush()
 
 
-    def on_model(model):
+    def update(network, exact):
         c["found"] += 1
-        skip = False
+        if args.true_positives and exact:
+            c["tp"] += 1
+        show_stats()
+        if not args.true_positives or exact:
+            networks.append(network)
+
+    def on_model(model):
         tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
         network = LogicalNetwork.from_hypertuples(hypergraph, tuples)
         if args.true_positives:
-            if is_true_positive(args, dataset, network):
-                c["tp"] += 1
-            else:
-                skip = True
-        show_stats()
-        if skip:
-            return
-        networks.append(network)
+            tp = is_true_positive(args, dataset, network)
+        update(network, tp)
+
+    if args.true_positives:
+        assert not args.enum_traces, "We do not support enumeration over traces yet"
+        def on_model_with_errors(sample):
+            network = sample.network(hypergraph)
+            trace = sample.trace(dataset)
+            update(network, is_true_positive(args, trace, network))
+    else:
+        on_model_with_errors = None
 
     try:
-        identifier.solutions(on_model, limit=args.limit, force_weight=args.force_weight)
+        identifier.solutions(on_model, on_model_with_errors,
+                limit=args.limit, force_weight=args.force_weight)
     finally:
         print("%d solution(s) for the over-approximation" % c["found"])
         if args.true_positives and c["found"]:
