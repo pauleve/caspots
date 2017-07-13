@@ -9,3 +9,4 @@
 
 #show measured(A,B,C,D) : measured(A,B,C,D), not tolerance.
 #show guessed(A,B,C,D) : guessed(A,B,C,D), not tolerance.
+#show obs(A,B,C,D) : obs(A,B,C,D), not tolerance.

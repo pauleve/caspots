@@ -9,6 +9,15 @@ from caspo.core import Clause
 
 from .asputils import *
 
+
+def network_str(network):
+    def clause_str(c):
+        if len(c) == 0:
+            return "FALSE"
+        return " OR ".join(["+".join(map(str, ls)) for ls in c])
+    return " / ".join(["%s = %s" % (v,clause_str(c)) for v,c in network.formulas_iter()])
+
+
 def domain_of_networks(networks):
 
     hg = networks.hg

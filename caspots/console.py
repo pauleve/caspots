@@ -186,7 +186,8 @@ def do_identify(args):
                     known_networks.add(h)
             else:
                 new = True
-            update(network, is_true_positive(args, trace, network), new)
+            tp = is_true_positive(args, trace, network)
+            update(network, tp, new)
     else:
         on_model_with_errors = None
 

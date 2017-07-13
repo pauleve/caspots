@@ -57,7 +57,10 @@ class ASPSample:
         self.optimization = model.optimization()
 
     def weight(self):
-        return self.optimization
+        return self.optimization[0]
+
+    def size(self):
+        return self.optimization[1] if len(self.optimization) > 1 else None
 
     def asp_exclusion(self):
         predicates = ["formula", "dnf", "clause"]
@@ -98,6 +101,13 @@ class ASPSample:
                     dataset.experiments[eid].obs[t][node] = value
         return dataset
 
+def print_conf(conf, prefix=""):
+    for k in conf.keys():
+        v = getattr(conf, k)
+        if isinstance(v, gringo.ConfigProxy):
+            print_conf(v, "%s%s" % (prefix, k))
+        else:
+            dbg("# conf %s%s = %s" % (prefix, k, v))
 
 class ASPSolver:
     def __init__(self, termset, opts, domain=None, restrict=None):
@@ -124,74 +134,85 @@ class ASPSolver:
         control.add("base", [], self.data)
         return control
 
-    def sample(self, first, scripts=[], weight=None):
-        args = []
-        if weight:
-            if isinstance(weight, list):
-                #assert len(weight) == 1, weight
-                weight = weight[0]
-            args += ["-c", "minWeight=%d" % weight,
-                    "-c", "maxWeight=%d" % weight]
-
-        control = self.default_control(*args)
-        if weight:
-            control.load(aspf("tolerance.lp"))
-
-        control.load(aspf("showMeasured.lp"))
-        if self.opts.family == "subset":
-            control.load(aspf("minimizeSizeOnly.lp"))
+    def sample(self, control, first, weight=None, minsize=None):
         if first:
-            control.load(aspf("minimizeWeightOnly.lp"))
-        for f in scripts:
-            control.load(f)
-        control.ground([("base", [])])
-        with control.solve_iter() as solutions:
-            for model in solutions:
-                return ASPSample(self.opts, model)
+            #control.conf.solve.opt_mode = "opt"
+            self.setup_opt(control)
+
+            control.ground([("base", [])])
+
+            control.load(aspf("show.lp"))
+            control.ground([("show", [])])
+            control.assign_external(gringo.Fun("tolerance"),False)
+
+        else:
+            if weight:
+                self.setup_weight(control, weight)
+            if minsize:
+                self.setup_card(control, minsize)
+            control.conf.solve.opt_mode = "ignore"
+            control.conf.solve.models = 1
+
+        models = []
+        res = control.solve(None, lambda model: models.append(ASPSample(self.opts, model)))
+        if models:
+            model = models.pop()
+            return model
 
     def solution_samples(self):
-        i = 1
-        if self.debug:
-            dbg("# model %d" %i)
-        s = self.sample(True)
-        yield s
-
-        weight = s.weight()
-        fd, excludelp = tempfile.mkstemp(".lp")
-        os.close(fd)
-
-        with open(excludelp, "w") as f:
-            f.write("%s\n" % s.asp_exclusion())
-
-        args = [excludelp]
+        control = self.default_control()
+        weight = None
+        size = None
+        i = 0
         while True:
-            s = self.sample(False, args, weight=weight)
+            s = self.sample(control, i == 0, weight=weight, minsize=size)
             if s:
                 i += 1
-                if self.debug:
-                    dbg("# model %d" %i)
                 yield s
-                with open(excludelp, "a") as f:
-                    f.write("%s\n" % s.asp_exclusion())
+                if i == 1:
+                    weight = s.weight()
+                    size = s.size()
+                    dbg("# first sample weight = %s, size = %s" % (weight, size))
+                control.add("excl", [], s.asp_exclusion())
+                control.ground([("excl", [])])
             else:
                 print("# Enumeration complete")
                 break
-        os.unlink(excludelp)
+
+    def setup_opt(self, control):
+        control.load(aspf("minimizeWeightOnly.lp"))
+        if self.do_mincard:
+            control.load(aspf("minimizeSizeOnly.lp"))
+
+    def setup_weight(self, control, weight):
+        max_weight = weight + self.opts.weight_tolerance
+        control.add("minWeight", [], ":- not " + str(weight) + " #sum {Erg,E,T,S : measured(E,T,S,V), not guessed(E,T,S,V), toGuess(E,T,S), obs(E,T,S,M), Erg=50-M, M < 50;" + " Erg,E,T,S : measured(E,T,S,V), not guessed(E,T,S,V), toGuess(E,T,S), obs(E,T,S,M), Erg=M-49, M >= 50} " + str(max_weight) + " .")
+        control.ground([("minWeight", [])])
+
+    def setup_card(self, control, minsize):
+        if self.do_mincard:
+            if self.opts.force_size:
+                maxsize = self.opts.force_size
+            else:
+                maxsize = minsize + self.opts.mincard_tolerance
+            control.add("minSize", [], ":- not " + str(minsize) + " #sum {L,I,J : dnf(I,J) , hyper(I,J,L)} " + str(maxsize) + ".")
+            control.ground([("minSize", [])])
+
+    @property
+    def do_mincard(self):
+        return  self.opts.family == "mincard" \
+            or self.opts.force_size is not None
 
     def solutions(self, on_model, on_model_weight=None, limit=0,
                     force_weight=None):
 
         control = self.default_control("0")
 
-        do_mincard = self.opts.family == "mincard" \
-            or self.opts.force_size is not None
         do_subsets = self.opts.family == "subset" \
             or (self.opts.family =="mincard" and self.opts.mincard_tolerance)
+        minsize = None
 
-        control.load(aspf("minimizeWeightOnly.lp"))
-        if do_mincard:
-            control.load(aspf("minimizeSizeOnly.lp"))
-
+        self.setup_opt(control)
         control.ground([("base", [])])
 
         control.load(aspf("show.lp"))
@@ -210,9 +231,10 @@ class ASPSolver:
             dbg("# optimizations = %s" % optimizations)
 
             weight = optimizations[0]
-            if do_mincard:
+            if self.do_mincard:
                 minsize = optimizations[1]
             if weight > 0 and on_model_weight is not None:
+                dbg("# model has weight, changing enumeration mode")
                 for sample in self.solution_samples():
                     on_model_weight(sample)
                 return
@@ -222,23 +244,13 @@ class ASPSolver:
             weight = force_weight
             dbg("# force weight = %d" % weight)
 
-        max_weight = weight + self.opts.weight_tolerance
-        control.add("minWeight", [], ":- not " + str(weight) + " #sum {Erg,E,T,S : measured(E,T,S,V), not guessed(E,T,S,V), toGuess(E,T,S), obs(E,T,S,M), Erg=50-M, M < 50;" + " Erg,E,T,S : measured(E,T,S,V), not guessed(E,T,S,V), toGuess(E,T,S), obs(E,T,S,M), Erg=M-49, M >= 50} " + str(max_weight) + " .")
-        control.ground([("minWeight", [])])
+        self.setup_weight(control, weight)
+        self.setup_card(control, minsize)
 
         control.conf.solve.opt_mode = "ignore"
         control.conf.solve.project = 1 # ????
         control.conf.solve.models = limit # ????
         #print control.conf.solver[0].keys()
-
-        if do_mincard:
-            if self.opts.force_size:
-                maxsize = self.opts.force_size
-            else:
-                maxsize = minsize + self.opts.mincard_tolerance
-            control.add("minSize", [], ":- not " + str(minsize) + " #sum {L,I,J : dnf(I,J) , hyper(I,J,L)} " + str(maxsize) + ".")
-            control.ground([("minSize", [])])
-
         if do_subsets:
             control.conf.solve.enum_mode = "domRec"
             control.conf.solver[0].heuristic = "Domain"
