@@ -37,10 +37,11 @@ def read_dataset(args, graph):
 
 def read_networks(args):
     networks = LogicalNetworkList.from_csv(args.networks)
-    if args.range_from:
+    if not args.range_length:
         end = len(networks)
-        if args.range_length:
-            end = args.range_from + args.range_length
+    else:
+        end = args.range_from + args.range_length
+    if args.range_from or end:
         indexes = range(args.range_from, end)
         networks = networks[indexes]
     return networks, networks.hg
