@@ -293,6 +293,10 @@ def run():
     domain_parser.add_argument("--networks", help="Networks to as domain (.csv)")
     domain_parser.add_argument("--partial-bn", help="Partial specification of the Boolean network (.bn)")
 
+    clingo_options = ArgumentParser(add_help=False)
+    clingo_options.add_argument("--clingo-parallel-mode", type=str,
+        help="--parallel-mode option for clingo ")
+
     parser_pkn2lp = subparsers.add_parser("pkn2lp",
         help="Export PKN (sif format) to ASP (lp format)",
         parents=[pkn_parser])
@@ -314,7 +318,7 @@ def run():
     parser_mse = subparsers.add_parser("mse",
         help="Compute the best MSE",
         parents=[pkn_parser, dataset_parser, identify_parser,
-                    modelchecking_p, domain_parser])
+                    modelchecking_p, domain_parser, clingo_options])
     parser_mse.add_argument("--check-exact", action="store_true", default=False,
                             help="look for a true positive with the computed MSE")
     parser_mse.set_defaults(func=do_mse)
@@ -322,7 +326,7 @@ def run():
     parser_identify = subparsers.add_parser("identify",
         help="Identify all the best Boolean networks",
         parents=[pkn_parser, dataset_parser, identify_parser,
-                    modelchecking_p, domain_parser])
+                    modelchecking_p, domain_parser, clingo_options])
     parser_identify.add_argument("--true-positives", default=False, action="store_true",
         help="filter solutions to keep only true positives (exact identification)")
     parser_identify.add_argument("--limit", default=0, type=int,

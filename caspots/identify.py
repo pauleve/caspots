@@ -132,6 +132,10 @@ class ASPSolver:
         control.load(aspf("supportConsistency.lp"))
         control.load(aspf("normalize.lp"))
         control.add("base", [], self.data)
+
+        if self.opts.clingo_parallel_mode:
+            control.conf.solve.parallel_mode = self.opts.clingo_parallel_mode
+
         return control
 
     def sample(self, control, first, weight=None, minsize=None):
