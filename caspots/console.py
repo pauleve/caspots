@@ -28,6 +28,11 @@ def dataset_name(args):
 def read_dataset(args, graph):
     ds = Dataset(dataset_name(args), dfactor=args.factor)
     ds.load_from_midas(args.dataset, graph)
+
+    if not ds.setup.stimuli:
+        dbg("# PKN has no stimuli: setting fully_controllable = False.")
+        args.fully_controllable = False
+
     return ds
 
 def read_networks(args):
