@@ -21,7 +21,7 @@ from caspots import modelchecking
 
 def read_pkn(args):
     graph = Graph.read_sif(args.pkn)
-    hypergraph = HyperGraph.from_graph(graph)
+    hypergraph = HyperGraph.from_graph(graph, args.max_clause_length)
     return graph, hypergraph
 
 def dataset_name(args):
@@ -294,6 +294,8 @@ def run():
 
     pkn_parser = ArgumentParser(add_help=False)
     pkn_parser.add_argument("pkn", help="Prior knowledge network (sif format)")
+    pkn_parser.add_argument("--max-clause-length", type=int, default=0,
+            help="Maximum size of clauses (conjunctions); 0=no constraint.")
     dataset_parser = ArgumentParser(add_help=False)
     dataset_parser.add_argument("dataset", help="Dataset (midas csv format)")
     dataset_parser.add_argument("--factor", type=int, default=100,
