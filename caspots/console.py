@@ -1,6 +1,7 @@
 
 from __future__ import print_function
 
+from functools import reduce
 import os
 import sys
 import tempfile
@@ -10,6 +11,7 @@ import gringo
 from caspo.core import Graph, HyperGraph, LogicalNetwork, LogicalNetworkList
 
 from .networks import *
+from .fixpoint import *
 from .utils import *
 from .asputils import *
 from .dataset import *
@@ -27,7 +29,8 @@ def dataset_name(args):
 
 def read_dataset(args, graph):
     ds = Dataset(dataset_name(args), dfactor=args.factor)
-    ds.load_from_midas(args.dataset, graph)
+    if args.dataset != "EMPTY":
+        ds.load_from_midas(args.dataset, graph)
 
     if not ds.setup.stimuli:
         dbg("# PKN has no stimuli: setting fully_controllable = False.")
@@ -64,6 +67,11 @@ def read_restriction(args, hypergraph, outf):
         return outf
     return None
 
+def read_fixpoints(args):
+    if args.fixpoints:
+        fps = Fixpoint.from_file(args.fixpoints)
+        return reduce(lambda a, b: a.push(b), fps, funset())
+
 def is_true_positive(args, dataset, network):
     fd, smvfile = tempfile.mkstemp(".smv")
     os.close(fd)
@@ -89,70 +97,77 @@ def do_results2lp(args):
     out = domain_of_networks(networks)
     print(out)
 
+def do_fixpoints2lp(args):
+    read_fixpoints(args).to_file(args.output)
+
+
+class Ctx:
+    def __init__(self, **entries):
+        self.__dict__.update(entries)
+
+class ConsoleIdentifier(object):
+    def __init__(self, args):
+        self.args = args
+
+    def __enter__(self):
+        args = self.args
+        graph, hypergraph = read_pkn(args)
+        dataset = read_dataset(args, graph)
+
+        fd, self.domainlp = tempfile.mkstemp(".lp")
+        os.close(fd)
+        domain, hypergraph = read_domain(args, hypergraph, dataset, self.domainlp)
+
+        termset = funset(hypergraph, dataset)
+
+        fd, self.restrictlp = tempfile.mkstemp(".lp")
+        os.close(fd)
+        restrict = read_restriction(args, hypergraph, self.restrictlp)
+
+        fixpoints = read_fixpoints(args)
+        if fixpoints:
+            termset.update(fixpoints)
+
+        identifier = identify.ASPSolver(termset, args, domain=domain,
+                                        restrict=restrict, fixpoints=fixpoints)
+        return Ctx(identifier = identifier,
+                hypergraph = hypergraph,
+                dataset = dataset)
+
+    def __exit__(self, type, value, traceback):
+        os.unlink(self.domainlp)
+        os.unlink(self.restrictlp)
+
+
 def do_mse(args):
-    graph, hypergraph = read_pkn(args)
-    dataset = read_dataset(args, graph)
-
-    fd, domainlp = tempfile.mkstemp(".lp")
-    os.close(fd)
-    domain, hypergraph = read_domain(args, hypergraph, dataset, domainlp)
-
-    termset = funset(hypergraph, dataset)
-
-    fd, restrictlp = tempfile.mkstemp(".lp")
-    os.close(fd)
-    restrict = read_restriction(args, hypergraph, restrictlp)
-
-    identifier = identify.ASPSolver(termset, args, domain=domain,
-                                    restrict=restrict)
-
     first = True
     exact = False
-    for sample in identifier.solution_samples():
-        (mse0, mse) = sample.mse()
-        if first:
-            print("MSE_discrete = %s" % mse0)
-            if mse0 == mse:
-                print("MSE_sample >= MSE_discrete")
+    with ConsoleIdentifier(args) as ctx:
+        for sample in ctx.identifier.solution_samples():
+            (mse0, mse) = sample.mse()
+            if first:
+                print("MSE_discrete = %s" % mse0)
+                if mse0 == mse:
+                    print("MSE_sample >= MSE_discrete")
+                else:
+                    print("MSE_sample >= %s" % mse)
+            if args.check_exact:
+                network = sample.network(ctx.hypergraph)
+                trace = sample.trace(ctx.dataset)
+                exact = is_true_positive(args, trace, network)
+                if exact:
+                    break
             else:
-                print("MSE_sample >= %s" % mse)
-        if args.check_exact:
-            network = sample.network(hypergraph)
-            trace = sample.trace(dataset)
-            exact = is_true_positive(args, trace, network)
-            if exact:
                 break
-        else:
-            break
-        first = False
+            first = False
     if args.check_exact:
         if exact:
             print("MSE_sample is exact")
         else:
             print("MSE_sample may be under-estimated (no True Positive found)")
-    os.unlink(domainlp)
-    os.unlink(restrictlp)
 
 
 def do_identify(args):
-    graph, hypergraph = read_pkn(args)
-    dataset = read_dataset(args, graph)
-
-    fd, domainlp = tempfile.mkstemp(".lp")
-    os.close(fd)
-    domain, hypergraph = read_domain(args, hypergraph, dataset, domainlp)
-
-    termset = funset(hypergraph, dataset)
-
-    fd, restrictlp = tempfile.mkstemp(".lp")
-    os.close(fd)
-    restrict = read_restriction(args, hypergraph, restrictlp)
-
-    identifier = identify.ASPSolver(termset, args, domain=domain,
-                                    restrict=restrict)
-
-    networks = LogicalNetworkList.from_hypergraph(hypergraph)
-
     c = {
         "found": 0,
         "tp": 0,
@@ -164,51 +179,52 @@ def do_identify(args):
             output.write("%d solution(s)\r" % c["found"])
         output.flush()
 
+    with ConsoleIdentifier(args) as ctx:
 
-    def update(network, exact, new=True):
-        if new:
-            c["found"] += 1
-        if args.true_positives and exact:
-            c["tp"] += 1
-        show_stats()
-        if not args.true_positives or exact:
-            networks.append(network)
+        networks = LogicalNetworkList.from_hypergraph(ctx.hypergraph)
 
-    def on_model(model):
-        tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
-        network = LogicalNetwork.from_hypertuples(hypergraph, tuples)
-        tp = args.true_positives and is_true_positive(args, dataset, network)
-        update(network, tp)
+        def update(network, exact, new=True):
+            if new:
+                c["found"] += 1
+            if args.true_positives and exact:
+                c["tp"] += 1
+            show_stats()
+            if not args.true_positives or exact:
+                networks.append(network)
 
-    if args.true_positives:
-        known_networks = set()
-        def on_model_with_errors(sample):
-            network = sample.network(hypergraph)
-            trace = sample.trace(dataset)
-            if args.enum_traces:
-                h = hash(tuple(network.to_array(hypergraph.mappings)))
-                new = h not in known_networks
-                if new:
-                    known_networks.add(h)
-            else:
-                new = True
-            tp = is_true_positive(args, trace, network)
-            update(network, tp, new)
-    else:
-        on_model_with_errors = None
+        def on_model(model):
+            tuples = (f.args() for f in model.atoms() if f.name() == "dnf")
+            network = LogicalNetwork.from_hypertuples(ctx.hypergraph, tuples)
+            tp = args.true_positives and is_true_positive(args, ctx.dataset, network)
+            update(network, tp)
 
-    try:
-        identifier.solutions(on_model, on_model_with_errors,
-                limit=args.limit, force_weight=args.force_weight)
-    finally:
-        print("%d solution(s) for the over-approximation" % c["found"])
-        if args.true_positives and c["found"]:
-            print("%d/%d true positives [rate: %0.2f%%]" \
-                % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
-        if networks:
-            networks.to_csv(args.output)
-        os.unlink(domainlp)
-        os.unlink(restrictlp)
+        if args.true_positives:
+            known_networks = set()
+            def on_model_with_errors(sample):
+                network = sample.network(ctx.hypergraph)
+                trace = sample.trace(ctx.dataset)
+                if args.enum_traces:
+                    h = hash(tuple(network.to_array(ctx.hypergraph.mappings)))
+                    new = h not in known_networks
+                    if new:
+                        known_networks.add(h)
+                else:
+                    new = True
+                tp = is_true_positive(args, trace, network)
+                update(network, tp, new)
+        else:
+            on_model_with_errors = None
+
+        try:
+            ctx.identifier.solutions(on_model, on_model_with_errors,
+                    limit=args.limit, force_weight=args.force_weight)
+        finally:
+            print("%d solution(s) for the over-approximation" % c["found"])
+            if args.true_positives and c["found"]:
+                print("%d/%d true positives [rate: %0.2f%%]" \
+                    % (c["tp"], c["found"], (100.*c["tp"])/c["found"]))
+            if networks:
+                networks.to_csv(args.output)
 
 
 
@@ -292,6 +308,7 @@ def run():
         parents=[networks_parser])
     domain_parser.add_argument("--networks", help="Networks to as domain (.csv)")
     domain_parser.add_argument("--partial-bn", help="Partial specification of the Boolean network (.bn)")
+    domain_parser.add_argument("--fixpoints", help="Fixpoint constraints (.csv)")
 
     clingo_options = ArgumentParser(add_help=False)
     clingo_options.add_argument("--clingo-parallel-mode", type=str,
@@ -314,6 +331,12 @@ def run():
         parents=[pkn_parser, dataset_parser, networks_parser])
     parser_results2lp.add_argument("networks", help="Networks file (.csv format)")
     parser_results2lp.set_defaults(func=do_results2lp)
+
+    parser_fixpoints2lp = subparsers.add_parser("fixpoints2lp",
+        help="Export fixpoints to ASP (lp format)")
+    parser_fixpoints2lp.add_argument("fixpoints", help="Fixpoints (.csv)")
+    parser_fixpoints2lp.add_argument("output", help="Output file (.lp format)")
+    parser_fixpoints2lp.set_defaults(func=do_fixpoints2lp)
 
     parser_mse = subparsers.add_parser("mse",
         help="Compute the best MSE",

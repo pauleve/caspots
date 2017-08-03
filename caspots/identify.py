@@ -110,7 +110,8 @@ def print_conf(conf, prefix=""):
             dbg("# conf %s%s = %s" % (prefix, k, v))
 
 class ASPSolver:
-    def __init__(self, termset, opts, domain=None, restrict=None):
+    def __init__(self, termset, opts, domain=None, restrict=None,
+                        fixpoints=False):
         self.termset = termset
         self.data = termset.to_str()
         self.opts = opts
@@ -123,6 +124,8 @@ class ASPSolver:
                 self.domain.append(restrict)
         else:
             self.domain = [domain]
+        if fixpoints:
+            self.domain.append(aspf("fixpoints.lp"))
 
     def default_control(self, *args):
         control = gringo.Control(["--conf=trendy", "--stats",

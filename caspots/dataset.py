@@ -54,6 +54,11 @@ class Dataset:
         self.name = name
         self.dfactor = dfactor
         self.discretize = getattr(self, "discretize_%s" % discretize)
+        self.setup = Setup([], [], [])
+        self.stimulus = set()
+        self.inhibitors = set()
+        self.readout = set()
+        self.experiments = {}
 
     def discretize_round(self, value):
         return int(round(self.dfactor*value))
