@@ -129,7 +129,8 @@ class ConsoleIdentifier(object):
             termset.update(fixpoints)
 
         identifier = identify.ASPSolver(termset, args, domain=domain,
-                                        restrict=restrict, fixpoints=fixpoints)
+                                        restrict=restrict, fixpoints=fixpoints,
+                                        nodataset=not dataset.experiments)
         return Ctx(identifier = identifier,
                 hypergraph = hypergraph,
                 dataset = dataset)

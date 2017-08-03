@@ -111,11 +111,12 @@ def print_conf(conf, prefix=""):
 
 class ASPSolver:
     def __init__(self, termset, opts, domain=None, restrict=None,
-                        fixpoints=False):
+                        fixpoints=False, nodataset=False):
         self.termset = termset
         self.data = termset.to_str()
         self.opts = opts
         self.debug = opts.debug
+        self.nodataset = nodataset
         if domain is None:
             self.domain = [aspf("guessBN.lp")]
             if opts.fully_controllable:
@@ -132,8 +133,9 @@ class ASPSolver:
                             "--opt-strat=usc"] + list(args))
         for f in self.domain:
             control.load(f)
-        control.load(aspf("supportConsistency.lp"))
-        control.load(aspf("normalize.lp"))
+        if not self.nodataset:
+            control.load(aspf("supportConsistency.lp"))
+            control.load(aspf("normalize.lp"))
         control.add("base", [], self.data)
 
         if self.opts.clingo_parallel_mode:
@@ -226,6 +228,9 @@ class ASPSolver:
         control.ground([("show", [])])
 
         start = time.time()
+
+        if self.nodataset:
+            force_weight = 0
 
         if force_weight is None:
             control.assign_external(gringo.Fun("tolerance"),False)
