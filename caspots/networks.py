@@ -61,6 +61,13 @@ def restrict_with_partial_bn(hypergraph, partial_bn_file):
             a = a.strip()
             ai = hypergraph.nodes[hypergraph.nodes == a].index[0]
             clauses = dict([parse_clause(c) for c in clauses.split("|")])
+            partial_req = {}
+
+            def register_surclause(c, hi):
+                if c not in partial_req:
+                    partial_req[c] = []
+                partial_req[c].append(hi)
+
             for hi in hypergraph.hyper[hypergraph.hyper == ai].index:
                 hc = hypergraph.clauses[hi]
                 complete = clauses.get(hc)
@@ -71,7 +78,13 @@ def restrict_with_partial_bn(hypergraph, partial_bn_file):
                     for c, complete in clauses.items():
                         if not complete and c.issubset(hc):
                             has_subset = True
-                            break
+                            register_surclause(c, hi)
                     if not has_subset:
                         asp.append(":- dnf({0},{1}).".format(ai,hi))
+                else:
+                    register_surclause(hc, hi)
+
+            for his in partial_req.values():
+                asp.append("1 {%s}." % ";".join(["dnf({},{})".format(ai,hi) for hi in his]))
+
     return "\n".join(asp)
