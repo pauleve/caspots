@@ -42,6 +42,16 @@ def domain_of_networks(networks):
 
 def restrict_with_partial_bn(hypergraph, partial_bn_file):
     asp = []
+
+    def parse_clause(data):
+        data = data.strip()
+        complete = True
+        if data.endswith(".."):
+            data = data.strip(".")
+            complete = False
+        return Clause.from_str(data), complete
+
+
     with open(partial_bn_file) as f:
         for line in f:
             line = line.strip().replace(' ','')
@@ -50,10 +60,18 @@ def restrict_with_partial_bn(hypergraph, partial_bn_file):
             a, clauses = line.split("=")
             a = a.strip()
             ai = hypergraph.nodes[hypergraph.nodes == a].index[0]
-            clauses = set([Clause.from_str(c) for c in clauses.split("|")])
+            clauses = dict([parse_clause(c) for c in clauses.split("|")])
             for hi in hypergraph.hyper[hypergraph.hyper == ai].index:
-                if hypergraph.clauses[hi] in clauses:
+                hc = hypergraph.clauses[hi]
+                complete = clauses.get(hc)
+                if complete:
                     asp.append("dnf({0},{1}).".format(ai, hi))
-                else:
-                    asp.append(":- dnf({0},{1}).".format(ai,hi))
+                elif complete is None:
+                    has_subset = False
+                    for c, complete in clauses.items():
+                        if not complete and c.issubset(hc):
+                            has_subset = True
+                            break
+                    if not has_subset:
+                        asp.append(":- dnf({0},{1}).".format(ai,hi))
     return "\n".join(asp)
