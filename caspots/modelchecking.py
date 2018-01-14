@@ -99,7 +99,7 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
 
         smv.write("E%d_SETUP := %s;\n" % (exp.id, " & ".join(setup) or "TRUE"))
         if 0 not in exp.obs:
-            smv.write("E%d_T0 := %s;\n" % (exp.id, t,
+            smv.write("E%d_T0 := %s;\n" % (exp.id,
                 " & ".join(["dirty_%s" % n for n in dirty_start])))
         for t, values in exp.obs.items():
             state = []
