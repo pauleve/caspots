@@ -50,7 +50,7 @@ class Experiment:
         return buf
 
 class Dataset:
-    def __init__(self, name, dfactor=100, discretize="round"):
+    def __init__(self, name, dfactor=100, discretize="round", control_nodes=[]):
         self.name = name
         self.dfactor = dfactor
         self.discretize = getattr(self, "discretize_%s" % discretize)
@@ -59,6 +59,7 @@ class Dataset:
         self.inhibitors = set()
         self.readout = set()
         self.experiments = {}
+        self.control_nodes = set(control_nodes)
 
     def discretize_round(self, value):
         return int(round(self.dfactor*value))
@@ -161,6 +162,7 @@ class Dataset:
                     fs.add(gringo.Fun('obs', [i, time, var, dval]))
         clampings = ClampingList(clampings)
         fs.update(clampings.to_funset("exp"))
+        fs.update([gringo.Fun('control', [n]) for n in self.control_nodes])
         fs.add(gringo.Fun('dfactor', [self.dfactor]))
         return fs
 

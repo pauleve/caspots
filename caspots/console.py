@@ -27,8 +27,17 @@ def read_pkn(args):
 def dataset_name(args):
     return os.path.basename(args.dataset).replace(".csv", "")
 
+def control_nodes(args, graph):
+    if not args.control_nodes:
+        return []
+    nodes = [n.strip() for n in args.control_nodes.split(",")]
+    for n in nodes:
+        assert graph.has_node(n), "{} is not a node!".format(n)
+    return nodes
+
 def read_dataset(args, graph):
-    ds = Dataset(dataset_name(args), dfactor=args.factor)
+    ds = Dataset(dataset_name(args), dfactor=args.factor,
+                    control_nodes=control_nodes(args, graph))
     if args.dataset != "EMPTY":
         ds.load_from_midas(args.dataset, graph)
 
@@ -300,6 +309,8 @@ def run():
     dataset_parser.add_argument("dataset", help="Dataset (midas csv format)")
     dataset_parser.add_argument("--factor", type=int, default=100,
                                     help="discretization factor (default: 100)")
+    dataset_parser.add_argument("--control-nodes", type=str, default=None,
+            help="Comma-separated list of control nodes")
 
     networks_parser = ArgumentParser(add_help=False)
     networks_parser.add_argument("--range-from", type=int, default=0,
