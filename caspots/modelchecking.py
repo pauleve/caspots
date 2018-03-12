@@ -2,6 +2,8 @@
 
 import subprocess
 
+from .utils import *
+
 U_GENERAL = "general"
 U_ASYNC = "asynchronous"
 
@@ -12,8 +14,11 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
     # nodes referenced in dataset
     dvars = dataset.setup.nodes.union(network.variables())
 
+    control_nodes = dataset.control_nodes
+
     # nodes for which a function is defined
     varying_nodes = set([node for node, _ in network.formulas_iter()])
+    varying_nodes.update(control_nodes)
 
     # nodes with no function (i.e., constant value)
     constants = dvars.difference(varying_nodes)
@@ -29,6 +34,7 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
             dirty_start.update(dataset.readout.difference(readouts0))
 
     clampable = varying_nodes.intersection(dataset.inhibitors.union(dataset.stimulus))
+    assert not control_nodes.intersection(clampable), "Control nodes should not be declared as TR!"
 
     smv = open(destfile, "w")
     smv.write("MODULE main\n")
@@ -60,10 +66,11 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         if n in clampable:
             smv.write("next(C_%s) := C_%s;\n" % (n, n))
         #smv.write("next(u_%s) := {TRUE, FALSE};\n" % n)
+
     smv.write("\nDEFINE\n")
 
     def nusmv_of_literal((var, sign)):
-        return "%sn_%s" % ("!" if sign == -1 else "", var)
+        return "%sn_%s" % ("!" if sign <= 0 else "", var)
 
     def nusmv_of_clause(clause):
         expr = " & ".join(map(nusmv_of_literal, clause))
@@ -77,12 +84,16 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         return " | ".join(map(nusmv_of_clause, clauses))
 
     for n, clauses in network.formulas_iter():
+        if n in control_nodes:
+            continue
         expr = nusmv_of_clauses(clauses)
         if n in clampable:
             smv.write("F_%s := case C_%s=0: %s; " % (n, n, expr))
             smv.write("C_%s=1: TRUE; C_%s=-1: FALSE; esac;\n" % (n, n))
         else:
             smv.write("F_%s := %s;\n" % (n, expr))
+    for n in control_nodes:
+        smv.write("F_{0} := !n_{0};\n".format(n))
 
     for exp in dataset.experiments.values():
         setup = []
@@ -133,22 +144,71 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
         smv.write(" & !u_%s" % n)
     smv.write(");\n")
 
+    if update == U_ASYNC:
+        control_stages = async_interleavings
+    else:
+        control_stages = general_interleavings
+
     def ctl_of_exp(exp):
-        ts = list(sorted(exp.obs.keys()))
-        ctl = "(E%d_SETUP & E%d_T0) -> " % (exp.id, exp.id)
-        if ts[0] == 0:
-            t0 = ts.pop(0)
+        def control_state(t):
+            return dict([(n,v) for (n,v) in exp.obs[t].items() if n in control_nodes])
+
+        def ctl_of_timeseries(t, ts):
             if not ts:
                 return "TRUE"
-        for t in ts:
-            ctl += "EF (E%d_T%d & " % (exp.id, t)
-        ctl = ctl[:-2] + ")"*len(ts)
-        return "(%s)" % ctl
 
-    smv.write("\nSPEC (\n  ")
-    smv.write("\n& ".join([ctl_of_exp(exp) for exp in dataset.experiments.values()]))
-    smv.write("\n);\n")
+            ctl_t = "E{exp}_T{t}".format(exp=exp.id, t=ts[0])
+            if len(ts) == 1:
+                next_ctl = ctl_t
+            else:
+                next_ctl = "({} & {})".format(ctl_t, ctl_of_timeseries(ts[0], ts[1:]))
+
+            if not control_nodes:
+                return "EF {}".format(next_ctl)
+
+            begin_control_state = control_state(t)
+            next_control_state = control_state(ts[0])
+            changing_control = [n for n in control_nodes \
+                        if begin_control_state[n] != next_control_state[n]]
+
+            control_paths = []
+            for stages in control_stages(changing_control):
+                cur_control_state = begin_control_state.copy()
+                control_path = [nusmv_of_clause(cur_control_state.items())]
+                for stage in stages:
+                    for n in stage:
+                        cur_control_state[n] = next_control_state[n]
+                    if stage:
+                        control_path.append(nusmv_of_clause(cur_control_state.items()))
+                control_paths.append(control_path)
+
+            def ctl_of_control_path(control_path):
+                ctl_path = ""
+                nb_par = 0
+                for steady in control_path:
+                    ctl_path += "E [{} U ".format(steady)
+                    nb_par += 1
+                ctl_path += next_ctl
+                ctl_path += "]"*nb_par
+                return "({})".format(ctl_path)
+
+            ctl = "|".join(map(ctl_of_control_path, control_paths))
+            if len(control_paths) > 1:
+                ctl = "({})".format(ctl)
+            return ctl
+
+        ts = list(sorted(exp.obs.keys()))
+        if ts[0] == 0:
+            ts.pop(0)
+        ctl = ctl_of_timeseries(0, ts)
+
+        return "((E{exp}_SETUP & E{exp}_T0) -> {ctl})"\
+                .format(exp=exp.id, ctl=ctl)
+
+    smv.write("CTLSPEC ")
+    smv.write("\n & ".join([ctl_of_exp(exp) for exp in dataset.experiments.values()]))
     smv.write("\n")
+
     smv.close()
     return destfile
 
