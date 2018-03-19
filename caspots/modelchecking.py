@@ -168,6 +168,13 @@ def make_smv(dataset, network, destfile, update=U_GENERAL):
 
             begin_control_state = control_state(t)
             next_control_state = control_state(ts[0])
+
+            for n in control_nodes:
+                assert n in begin_control_state, \
+                    "Exp {}: {} is not defined at t={}".format(exp.id, n, t)
+                assert n in next_control_state, \
+                    "Exp {}: {} is not defined at t={}".format(exp.id, n, ts[0])
+
             changing_control = [n for n in control_nodes \
                         if begin_control_state[n] != next_control_state[n]]
 

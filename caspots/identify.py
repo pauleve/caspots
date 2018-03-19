@@ -96,6 +96,10 @@ class ASPSample:
                 eid, t, node, value = a.args()
                 if node not in dataset.readout:
                     continue
+                if node in dataset.control_nodes:
+                    continue
+                if node not in dataset.experiments[eid].obs[t]:
+                    continue
                 if dataset.experiments[eid].obs[t][node] != value:
                     #print(((eid,t,node),dataset.experiments[eid].obs[t][node], value), file=sys.stderr)
                     dataset.experiments[eid].obs[t][node] = value
