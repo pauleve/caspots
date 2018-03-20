@@ -125,10 +125,8 @@ class Dataset:
             clamps = tuple(clamps)
 
             times = list(set(map(int,row.filter(regex='^DA:').values)))
-            if len(times) == 1:
-                time = times[0]
-            else:
-                time = None
+            assert len(times) == 1, "MIDAS: inconsistent DA values at row {}".format(i+2)
+            time = times[0]
             exp = exp_of_clamps(clamps, time)
 
             for var, fvalue in row.filter(regex='^DV').iteritems():
