@@ -28,6 +28,8 @@ path(U,V) :- path(U,W); path(W,V).
 %eval(E,V, 1) :- free(E,V,I); eval(E,W,T) : clause(J,W,T); dnf(I,J).
 %eval(E,V,-1) :- free(E,V,I); eval_clause(E,J,-1) : dnf(I,J).
 
+clamped(do_not_use,do_not_use,do_not_use).
+
 %rss(D,V,1,(F-D)**2) :- obs(E,V,D); dfactor(F).
 %rss(D,V,-1,D**2)  :- obs(E,V,D).
 
