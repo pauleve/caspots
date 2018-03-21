@@ -12,7 +12,7 @@ path(U,V) :- path(U,W); path(W,V).
    dnf(I,J1);  dnf(I,J2); clause(J2,U,S) : clause(J1,U,S).
 
 % contradictions
-:- formula(V,I); dnf(I,J); edge(J,U,S); edge(J,U,-S).
+:- formula(V,I); dnf(I,J1); dnf(I,J2); edge(J1,U,S); edge(J2,U,-S).
 
 % V is not leading to any readout (non-observable)
 :- path(_,V); not readout(V); not path(V,U) : readout(U).
