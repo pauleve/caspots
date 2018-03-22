@@ -69,10 +69,12 @@ class Dataset:
 
     def load_from_midas(self, midas, graph):
         df = pd.read_csv(midas)
-        df.drop(df.columns[0], axis=1, inplace=True)
+        #df.drop(df.columns[0], axis=1, inplace=True)
         df = df.reset_index(drop=True)
 
         def is_stimulus(name):
+            if name.lower() == 'tr:cell:cellline':
+                return False
             return name.startswith('TR') and not name.endswith('i')
         def is_inhibitor(name):
             return name.startswith('TR') and name.endswith('i')
@@ -91,16 +93,16 @@ class Dataset:
 
         exp_t = {}
         order = {}
-        def exp_of_clamps(clamps, time=None):
+        def exp_of_clamps(cellline, clamps, time=None):
             if time is not None:
-                key = (clamps, time)
+                key = (cellline, clamps, time)
                 if key not in order:
                     order[key] = 1
                 else:
                     order[key] += 1
-                key = (clamps, order[key])
+                key = (cellline, clamps, order[key])
             else:
-                key = clamps
+                key = (cellline, clamps)
             if key not in exp_t:
                 eid = len(exp_t)
                 exp = Experiment(eid)
@@ -114,7 +116,11 @@ class Dataset:
 
         for i, row in df.iterrows():
             clamps = set()
+            cellline = None
             for var, sign in row.filter(regex='^TR').iteritems():
+                if var.lower() == 'tr:cell:cellline':
+                    cellline = int(sign)
+                    continue
                 var = var[3:]
                 sign = int(sign)
                 if var in stimuli:
@@ -127,7 +133,7 @@ class Dataset:
             times = list(set(map(int,row.filter(regex='^DA:').values)))
             assert len(times) == 1, "MIDAS: inconsistent DA values at row {}".format(i+2)
             time = times[0]
-            exp = exp_of_clamps(clamps, time)
+            exp = exp_of_clamps(cellline, clamps, time)
 
             for var, fvalue in row.filter(regex='^DV').iteritems():
                 if np.isnan(fvalue):
