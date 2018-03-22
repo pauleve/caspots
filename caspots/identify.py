@@ -43,6 +43,8 @@ def MSE(cd):
     for key in keys:
         if key not in data["obs"]:
             continue
+        if key not in data["bin"]:
+            continue
         n += 1
         cum += (data["obs"][key] - data["bin"][key])**2
     return math.sqrt(cum/n)
