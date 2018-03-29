@@ -40,6 +40,4 @@ path(U,V) :- path(U,W); path(W,V).
 :- maxsize + 1 #sum {L,I,J : dnf(I,J) , hyper(I,J,L) }; maxsize >= 0.
 %:- maxrss + 1 #sum {W,E,V,S : not eval(E,V,-S) , obs(E,V,D) , rss(D,V,S,W) }; maxrss >= 0.
 
-% test Aurelien_Cornet
 :- formula(V,I); dnf(I,J1); dnf(I, J2); edge(J1,U,S); edge(J2,U,-S).
-
