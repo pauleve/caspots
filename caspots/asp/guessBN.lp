@@ -12,7 +12,7 @@ path(U,V) :- path(U,W); path(W,V).
    dnf(I,J1);  dnf(I,J2); clause(J2,U,S) : clause(J1,U,S).
 
 % contradictions
-:- formula(V,I); dnf(I,J); edge(J,U,S); edge(J,U,-S).
+:- formula(V,I); dnf(I,J1); dnf(I,J2); edge(J1,U,S); edge(J2,U,-S).
 
 % V is not leading to any readout (non-observable)
 :- path(_,V); not readout(V); not path(V,U) : readout(U).
@@ -28,6 +28,8 @@ path(U,V) :- path(U,W); path(W,V).
 %eval(E,V, 1) :- free(E,V,I); eval(E,W,T) : clause(J,W,T); dnf(I,J).
 %eval(E,V,-1) :- free(E,V,I); eval_clause(E,J,-1) : dnf(I,J).
 
+clamped(do_not_use,do_not_use,do_not_use).
+
 %rss(D,V,1,(F-D)**2) :- obs(E,V,D); dfactor(F).
 %rss(D,V,-1,D**2)  :- obs(E,V,D).
 
@@ -40,4 +42,3 @@ path(U,V) :- path(U,W); path(W,V).
 :- maxsize + 1 #sum {L,I,J : dnf(I,J) , hyper(I,J,L) }; maxsize >= 0.
 %:- maxrss + 1 #sum {W,E,V,S : not eval(E,V,-S) , obs(E,V,D) , rss(D,V,S,W) }; maxrss >= 0.
 
-:- formula(V,I); dnf(I,J1); dnf(I, J2); edge(J1,U,S); edge(J2,U,-S).
