@@ -24,7 +24,7 @@ last(E,T) :- maxtp(E,T).
 clause(X) :- clause(X,_,_).
 
 
-toGuess(E,T,S) :- obs(E,T,S,X).
+toGuess(E,T,S) :- obs(E,T,S,X), not control(S).
 1{guessed(E,T,S,(1;0))}1  :- toGuess(E,T,S).
 1{guessed(E,T,S,(1;0))}1  :- unobsSpec(E,T,S).
 1{measured(E,T,S,(1;0))}1 :- unobsSpec(E,T,S).
